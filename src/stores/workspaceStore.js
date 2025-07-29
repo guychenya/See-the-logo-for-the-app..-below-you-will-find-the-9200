@@ -38,12 +38,12 @@ export const useWorkspaceStore = create((set, get) => ({
   ],
   
   currentWorkspace: null,
-  
+
   setCurrentWorkspace: (workspaceId) => {
     const workspace = get().workspaces.find(w => w.id === workspaceId);
     set({ currentWorkspace: workspace });
   },
-  
+
   createWorkspace: (workspaceData) => {
     const newWorkspace = {
       id: Date.now().toString(),
@@ -54,8 +54,39 @@ export const useWorkspaceStore = create((set, get) => ({
       agents: 0,
       lastActivity: new Date().toISOString()
     };
+    
     set(state => ({
       workspaces: [...state.workspaces, newWorkspace]
     }));
+    
+    return newWorkspace;
+  },
+
+  updateWorkspace: (workspaceId, updates) => {
+    set(state => ({
+      workspaces: state.workspaces.map(workspace =>
+        workspace.id === workspaceId
+          ? { ...workspace, ...updates, lastActivity: new Date().toISOString() }
+          : workspace
+      )
+    }));
+    
+    // Update current workspace if it's the one being updated
+    const currentWorkspace = get().currentWorkspace;
+    if (currentWorkspace && currentWorkspace.id === workspaceId) {
+      set({ currentWorkspace: { ...currentWorkspace, ...updates } });
+    }
+  },
+
+  deleteWorkspace: (workspaceId) => {
+    set(state => ({
+      workspaces: state.workspaces.filter(workspace => workspace.id !== workspaceId)
+    }));
+    
+    // Clear current workspace if it's the one being deleted
+    const currentWorkspace = get().currentWorkspace;
+    if (currentWorkspace && currentWorkspace.id === workspaceId) {
+      set({ currentWorkspace: null });
+    }
   }
 }));

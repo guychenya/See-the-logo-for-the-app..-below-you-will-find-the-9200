@@ -4,11 +4,12 @@ import { motion } from 'framer-motion';
 import { useAgentStore } from '../stores/agentStore';
 import AgentCard from '../components/Agent/AgentCard';
 import CreateAgentWizard from '../components/Agent/CreateAgentWizard';
+import IntelligentAgentCreator from '../components/Agent/IntelligentAgentCreator';
 import AgentHierarchyView from '../components/Agent/AgentHierarchyView';
 import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 
-const { FiPlus, FiSearch, FiFilter, FiList, FiGrid } = FiIcons;
+const { FiPlus, FiSearch, FiFilter, FiList, FiGrid, FiZap } = FiIcons;
 
 function AgentManagement() {
   const { workspaceId } = useParams();
@@ -16,11 +17,12 @@ function AgentManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showIntelligentCreator, setShowIntelligentCreator] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const [selectedParentId, setSelectedParentId] = useState(null);
 
   const agents = getAgentsByWorkspace(workspaceId);
-  
+
   const filteredAgents = agents.filter(agent => {
     const matchesSearch = agent.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          agent.description.toLowerCase().includes(searchTerm.toLowerCase());
@@ -45,31 +47,43 @@ function AgentManagement() {
           <p className="text-slate-400">Create and manage your AI agents</p>
         </div>
         
-        <motion.button
-          onClick={() => {
-            setSelectedParentId(null);
-            setShowCreateModal(true);
-          }}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="mt-4 lg:mt-0 bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 hover:from-indigo-600 hover:to-purple-700 transition-all duration-200"
-        >
-          <SafeIcon icon={FiPlus} className="w-5 h-5" />
-          Create Agent
-        </motion.button>
+        <div className="flex gap-3 mt-4 lg:mt-0">
+          <motion.button
+            onClick={() => setShowIntelligentCreator(true)}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 hover:from-purple-600 hover:to-pink-700 transition-all duration-200"
+          >
+            <SafeIcon icon={FiZap} className="w-5 h-5" />
+            AI Agent Creator
+          </motion.button>
+          
+          <motion.button
+            onClick={() => {
+              setSelectedParentId(null);
+              setShowCreateModal(true);
+            }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 hover:from-indigo-600 hover:to-purple-700 transition-all duration-200"
+          >
+            <SafeIcon icon={FiPlus} className="w-5 h-5" />
+            Manual Create
+          </motion.button>
+        </div>
       </div>
 
       {/* Agent Hierarchy View */}
-      <AgentHierarchyView 
-        agents={agents} 
-        workspaceId={workspaceId} 
+      <AgentHierarchyView
+        agents={agents}
+        workspaceId={workspaceId}
         onCreateSubAgent={handleCreateSubAgent}
       />
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row gap-4 mb-8">
         <div className="relative flex-1">
-          <SafeIcon 
+          <SafeIcon
             icon={FiSearch}
             className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5"
           />
@@ -94,17 +108,21 @@ function AgentManagement() {
             <option value="specialized">Specialized Agents</option>
           </select>
         </div>
-
+        
         <div className="flex bg-slate-800 border border-slate-700 rounded-lg p-1">
           <button
             onClick={() => setViewMode('grid')}
-            className={`p-2 rounded ${viewMode === 'grid' ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`p-2 rounded ${
+              viewMode === 'grid' ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:text-white'
+            }`}
           >
             <SafeIcon icon={FiGrid} className="w-5 h-5" />
           </button>
           <button
             onClick={() => setViewMode('list')}
-            className={`p-2 rounded ${viewMode === 'list' ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`p-2 rounded ${
+              viewMode === 'list' ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:text-white'
+            }`}
           >
             <SafeIcon icon={FiList} className="w-5 h-5" />
           </button>
@@ -155,24 +173,45 @@ function AgentManagement() {
             {searchTerm ? 'No agents found matching your search.' : 'No agents created yet.'}
           </div>
           {!searchTerm && (
-            <motion.button
-              onClick={() => setShowCreateModal(true)}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="bg-indigo-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-600 transition-colors"
-            >
-              Create Your First Agent
-            </motion.button>
+            <div className="flex justify-center gap-4">
+              <motion.button
+                onClick={() => setShowIntelligentCreator(true)}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="bg-gradient-to-r from-purple-500 to-pink-600 text-white px-6 py-3 rounded-lg font-medium hover:from-purple-600 hover:to-pink-700 transition-all duration-200 flex items-center gap-2"
+              >
+                <SafeIcon icon={FiZap} className="w-5 h-5" />
+                AI Agent Creator
+              </motion.button>
+              
+              <motion.button
+                onClick={() => setShowCreateModal(true)}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="bg-indigo-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-600 transition-colors flex items-center gap-2"
+              >
+                <SafeIcon icon={FiPlus} className="w-5 h-5" />
+                Manual Create
+              </motion.button>
+            </div>
           )}
         </div>
       )}
 
-      {/* Create Agent Modal */}
-      {showCreateModal && (
-        <CreateAgentWizard 
+      {/* Modals */}
+      {showIntelligentCreator && (
+        <IntelligentAgentCreator
           workspaceId={workspaceId}
           parentAgentId={selectedParentId}
-          onClose={() => setShowCreateModal(false)} 
+          onClose={() => setShowIntelligentCreator(false)}
+        />
+      )}
+
+      {showCreateModal && (
+        <CreateAgentWizard
+          workspaceId={workspaceId}
+          parentAgentId={selectedParentId}
+          onClose={() => setShowCreateModal(false)}
         />
       )}
     </div>

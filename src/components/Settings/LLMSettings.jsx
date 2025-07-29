@@ -5,7 +5,7 @@ import { llmService } from '../../services/llmService';
 import SafeIcon from '../../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 
-const { FiCheck, FiX, FiRefreshCw, FiEye, FiEyeOff, FiAlertCircle, FiCheckCircle, FiSettings } = FiIcons;
+const { FiCheck, FiX, FiRefreshCw, FiEye, FiEyeOff, FiAlertCircle, FiCheckCircle, FiSettings, FiExternalLink } = FiIcons;
 
 function LLMSettings() {
   const { 
@@ -21,11 +21,24 @@ function LLMSettings() {
   const [testResults, setTestResults] = useState({});
   const [showApiKeys, setShowApiKeys] = useState({});
   const [debugInfo, setDebugInfo] = useState("");
+  const [ollamaModelPath, setOllamaModelPath] = useState("");
 
   useEffect(() => {
     // Auto-detect Ollama models on component mount
     console.log("LLMSettings mounted, detecting Ollama models...");
     handleDetectOllama();
+    
+    // Suggest potential Ollama model path based on OS
+    const isWindows = navigator.platform.indexOf('Win') > -1;
+    const isMac = navigator.platform.indexOf('Mac') > -1;
+    
+    if (isMac) {
+      setOllamaModelPath("~/.ollama/models");
+    } else if (isWindows) {
+      setOllamaModelPath("%USERPROFILE%\\.ollama\\models");
+    } else {
+      setOllamaModelPath("~/.ollama/models");
+    }
   }, []);
 
   const handleDetectOllama = async () => {
@@ -49,9 +62,9 @@ function LLMSettings() {
     try {
       const models = await detectOllamaModels(true);
       console.log("Detection complete, models:", models);
-      setDebugInfo(`Detection complete. Found: ${models.join(', ')}`);
       
       if (models.length > 0) {
+        setDebugInfo(`Detection complete. Found: ${models.join(', ')}`);
         setTestResults(prev => ({
           ...prev,
           ollama: { success: true, message: `Found ${models.length} models` }
@@ -70,7 +83,7 @@ function LLMSettings() {
       console.error("Error detecting Ollama models:", error);
       setTestResults(prev => ({
         ...prev,
-        ollama: { success: false, message: 'Failed to connect to Ollama' }
+        ollama: { success: false, message: error.message || 'Failed to connect to Ollama' }
       }));
       setDebugInfo(`Error: ${error.message}`);
     }
@@ -96,7 +109,7 @@ function LLMSettings() {
         
         console.log(`Testing connection to Ollama with model: ${providerData.selectedModel}`);
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
         
         const response = await fetch(`${providerData.baseUrl}/api/generate`, {
           method: 'POST',
@@ -113,14 +126,19 @@ function LLMSettings() {
         clearTimeout(timeoutId);
         
         if (!response.ok) {
-          throw new Error(`API error: ${response.status} ${response.statusText}`);
+          const errorText = await response.text();
+          throw new Error(`API error: ${response.status} ${response.statusText} - ${errorText}`);
         }
+        
+        const data = await response.json();
+        console.log("Ollama test response:", data);
         
         setTestResults(prev => ({
           ...prev,
           [provider]: {
             success: true,
-            message: 'Connection successful'
+            message: 'Connection successful',
+            response: data.response
           }
         }));
       } else {
@@ -372,8 +390,44 @@ function LLMSettings() {
           <p>2. Make sure the Ollama service is running: <code className="bg-slate-700 px-2 py-1 rounded">ollama serve</code></p>
           <p>3. Pull a model: <code className="bg-slate-700 px-2 py-1 rounded">ollama pull llama2</code></p>
           <p>4. Click "Detect Models" above to auto-configure</p>
-          <p className="text-yellow-400">Troubleshooting: If models aren't detected, verify Ollama is running and accessible at http://localhost:11434/api/models</p>
-          <p className="text-yellow-400">You can manually check by opening this URL in your browser: <a href="http://localhost:11434/api/models" target="_blank" rel="noopener noreferrer" className="underline">http://localhost:11434/api/models</a></p>
+          
+          <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+            <h4 className="text-blue-400 font-medium mb-2 flex items-center gap-2">
+              <SafeIcon icon={FiAlertCircle} className="w-4 h-4" />
+              CORS Troubleshooting
+            </h4>
+            <p className="text-slate-300">If you're having issues with CORS when connecting to Ollama, try one of these solutions:</p>
+            <ol className="list-decimal pl-5 mt-2 space-y-2">
+              <li>Run Ollama with CORS enabled: <code className="bg-slate-700 px-2 py-1 rounded">OLLAMA_ORIGINS=* ollama serve</code></li>
+              <li>Use a browser extension that disables CORS for local development</li>
+              <li>Run your application and Ollama on the same domain/port using a proxy</li>
+            </ol>
+          </div>
+          
+          <p className="mt-4">Your Ollama models are likely located at: <code className="bg-slate-700 px-2 py-1 rounded">{ollamaModelPath}</code></p>
+          
+          <div className="flex items-center gap-2 mt-3">
+            <p>Check Ollama API directly:</p>
+            <a 
+              href="http://localhost:11434/api/tags" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+            >
+              /api/tags
+              <SafeIcon icon={FiExternalLink} className="w-3 h-3" />
+            </a>
+            <span className="text-slate-500">or</span>
+            <a 
+              href="http://localhost:11434/api/models" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+            >
+              /api/models
+              <SafeIcon icon={FiExternalLink} className="w-3 h-3" />
+            </a>
+          </div>
         </div>
       </div>
     </div>

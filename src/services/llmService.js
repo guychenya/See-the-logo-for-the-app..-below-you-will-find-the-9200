@@ -120,11 +120,16 @@ class LLMService {
   async callOllama(prompt, options, provider) {
     try {
       console.log(`Calling Ollama API with model: ${provider.selectedModel}`);
+      
+      // Try to add CORS headers to avoid issues
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+      
       const response = await fetch(`${provider.baseUrl}/api/generate`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers,
         body: JSON.stringify({
           model: provider.selectedModel,
           prompt: prompt,
@@ -146,6 +151,12 @@ class LLMService {
       return data.response;
     } catch (error) {
       console.error("Ollama API error:", error);
+      
+      // Provide more helpful error message for CORS issues
+      if (error.message.includes('CORS') || error.name === 'TypeError') {
+        throw new Error('CORS error: Unable to access Ollama API. Try running Ollama with CORS enabled: "OLLAMA_ORIGINS=* ollama serve"');
+      }
+      
       throw error;
     }
   }
@@ -205,23 +216,31 @@ Make the configuration detailed, practical, and tailored to the specific use cas
         case 'ollama':
           console.log(`Testing Ollama with model: ${providerData.selectedModel}`);
           try {
-            // First check if the models API endpoint is accessible
-            const modelsController = new AbortController();
-            const modelsTimeoutId = setTimeout(() => modelsController.abort(), 5000);
+            // First check if the server is accessible with a simple version check
+            const versionController = new AbortController();
+            const versionTimeoutId = setTimeout(() => versionController.abort(), 5000);
             
-            const modelsResponse = await fetch(`${providerData.baseUrl}/api/models`, {
-              signal: modelsController.signal
-            });
-            
-            clearTimeout(modelsTimeoutId);
-            
-            if (!modelsResponse.ok) {
-              throw new Error(`Models API error: ${modelsResponse.status} - Unable to access Ollama models API`);
+            try {
+              const versionResponse = await fetch(`${providerData.baseUrl}/api/version`, {
+                signal: versionController.signal
+              });
+              
+              clearTimeout(versionTimeoutId);
+              
+              if (versionResponse.ok) {
+                const versionData = await versionResponse.json();
+                console.log("Ollama version:", versionData.version);
+              } else {
+                console.log("Version check failed, but continuing with model test");
+              }
+            } catch (versionError) {
+              console.log("Version check failed:", versionError);
+              // Continue with the generation test anyway
             }
             
-            // Now test generation
+            // Now test actual generation
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
             
             const response = await fetch(`${providerData.baseUrl}/api/generate`, {
               method: 'POST',
@@ -244,9 +263,22 @@ Make the configuration detailed, practical, and tailored to the specific use cas
             
             const data = await response.json();
             console.log("Ollama test response:", data);
-            return { success: true, message: "Connection successful" };
+            return { 
+              success: true, 
+              message: "Connection successful",
+              response: data.response
+            };
           } catch (err) {
             console.error("Ollama test error:", err);
+            
+            // Check if it's a CORS error
+            if (err.message.includes('CORS') || err.name === 'TypeError') {
+              return { 
+                success: false, 
+                error: 'CORS error: Unable to access Ollama API. Try running Ollama with CORS enabled: "OLLAMA_ORIGINS=* ollama serve"'
+              };
+            }
+            
             return { success: false, error: err.message };
           }
           

@@ -37,7 +37,10 @@ export const useSettingsStore = create(
           baseUrl: 'http://localhost:11434',
           models: [],
           selectedModel: '',
-          isLocal: true
+          isLocal: true,
+          isAutoDetecting: false,
+          lastDetectionAttempt: null,
+          connectionError: null
         }
       },
       
@@ -50,7 +53,8 @@ export const useSettingsStore = create(
         autoSave: true,
         enableNotifications: true,
         maxChatHistory: 100,
-        enableDebugMode: false
+        enableDebugMode: false,
+        autoConnectOnStartup: true
       },
 
       // Update LLM Provider
@@ -72,31 +76,116 @@ export const useSettingsStore = create(
       },
 
       // Detect Ollama Models
-      detectOllamaModels: async () => {
+      detectOllamaModels: async (forceRefresh = false) => {
+        const state = get();
+        const ollama = state.llmProviders.ollama;
+
+        // Skip if we've attempted detection recently (within 30 seconds) unless forced
+        const now = Date.now();
+        if (
+          !forceRefresh && 
+          ollama.lastDetectionAttempt && 
+          (now - ollama.lastDetectionAttempt < 30000) &&
+          ollama.isAutoDetecting
+        ) {
+          return ollama.models;
+        }
+
+        // Mark as detecting
+        set(state => ({
+          llmProviders: {
+            ...state.llmProviders,
+            ollama: {
+              ...state.llmProviders.ollama,
+              isAutoDetecting: true,
+              lastDetectionAttempt: now,
+              connectionError: null
+            }
+          }
+        }));
+
         try {
-          const response = await fetch('http://localhost:11434/api/tags');
-          if (response.ok) {
-            const data = await response.json();
-            const models = data.models?.map(model => model.name) || [];
-            
+          console.log('Attempting to fetch Ollama models...');
+          // Use the fetch API with a timeout to prevent hanging
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          const response = await fetch('http://localhost:11434/api/tags', {
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch models: ${response.status} ${response.statusText}`);
+          }
+          
+          const data = await response.json();
+          console.log('Ollama API response:', data);
+          
+          // Check if models array exists and has items
+          if (!data.models || !Array.isArray(data.models) || data.models.length === 0) {
             set(state => ({
               llmProviders: {
                 ...state.llmProviders,
                 ollama: {
                   ...state.llmProviders.ollama,
-                  models,
-                  selectedModel: models[0] || '',
-                  enabled: models.length > 0
+                  isAutoDetecting: false,
+                  connectionError: 'No models found. Please pull models using the Ollama CLI.',
+                  models: []
                 }
               }
             }));
-            
-            return models;
+            return [];
           }
+          
+          // Extract model names
+          const models = data.models.map(model => model.name);
+          
+          console.log('Found models:', models);
+          
+          set(state => ({
+            llmProviders: {
+              ...state.llmProviders,
+              ollama: {
+                ...state.llmProviders.ollama,
+                models,
+                selectedModel: models[0] || '',
+                enabled: models.length > 0,
+                isAutoDetecting: false,
+                connectionError: null
+              }
+            }
+          }));
+          
+          return models;
         } catch (error) {
-          console.log('Ollama not available:', error);
+          console.error('Ollama detection error:', error);
+          
+          set(state => ({
+            llmProviders: {
+              ...state.llmProviders,
+              ollama: {
+                ...state.llmProviders.ollama,
+                isAutoDetecting: false,
+                connectionError: error.message || 'Failed to connect to Ollama'
+              }
+            }
+          }));
+          
+          return [];
         }
-        return [];
+      },
+
+      // Auto-connect to available LLM providers
+      autoConnectProviders: async () => {
+        if (!get().appSettings.autoConnectOnStartup) return;
+        
+        console.log('Auto-connecting to LLM providers...');
+        // Start with Ollama as it's the preferred local option
+        await get().detectOllamaModels(true);
+        
+        // Future: Add auto-connection logic for other providers if API keys are stored
       },
 
       // Update App Settings
@@ -114,6 +203,36 @@ export const useSettingsStore = create(
         const state = get();
         const provider = state.llmProviders[state.defaultProvider];
         return provider?.enabled ? provider : null;
+      },
+
+      // Test connection with current active provider
+      testActiveConnection: async () => {
+        const provider = get().getActiveProvider();
+        if (!provider) return { success: false, error: "No active provider configured" };
+        
+        try {
+          // Simple test query to verify connection works
+          const response = await fetch(`${provider.baseUrl}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: provider.selectedModel,
+              prompt: "Say 'Connection successful'",
+              options: { temperature: 0.7, num_predict: 20 },
+              stream: false
+            }),
+            signal: AbortSignal.timeout(5000) // 5 second timeout
+          });
+          
+          if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          return { success: true, message: "Connection successful" };
+        } catch (error) {
+          return { success: false, error: error.message };
+        }
       }
     }),
     {

@@ -2,6 +2,7 @@ import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './stores/authStore';
+import { useSettingsStore } from './stores/settingsStore';
 import { useEffect } from 'react';
 
 // Pages
@@ -23,10 +24,23 @@ import Layout from './components/Layout/Layout';
 
 function App() {
   const { user, initializeAuth } = useAuthStore();
+  const { autoConnectProviders } = useSettingsStore();
 
   useEffect(() => {
     initializeAuth();
   }, [initializeAuth]);
+
+  useEffect(() => {
+    // Auto-connect to LLM providers if the user is authenticated
+    if (user) {
+      console.log('User authenticated, auto-connecting to LLM providers...');
+      setTimeout(() => {
+        autoConnectProviders().catch(err => {
+          console.error('Error auto-connecting to LLM providers:', err);
+        });
+      }, 1000); // Small delay to ensure UI is loaded first
+    }
+  }, [user, autoConnectProviders]);
 
   if (!user) {
     return <Login />;
@@ -51,12 +65,9 @@ function App() {
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </Layout>
-        <Toaster 
-          position="top-right"
-          toastOptions={{
-            className: 'bg-slate-800 text-white border border-slate-700',
-          }}
-        />
+        <Toaster position="top-right" toastOptions={{
+          className: 'bg-slate-800 text-white border border-slate-700',
+        }} />
       </div>
     </Router>
   );

@@ -5,23 +5,45 @@ import { llmService } from '../../services/llmService';
 import SafeIcon from '../../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 
-const { FiCheck, FiX, FiRefreshCw, FiEye, FiEyeOff, FiAlertCircle, FiCheckCircle } = FiIcons;
+const { FiCheck, FiX, FiRefreshCw, FiEye, FiEyeOff, FiAlertCircle, FiCheckCircle, FiSettings } = FiIcons;
 
 function LLMSettings() {
-  const { llmProviders, defaultProvider, updateProvider, setDefaultProvider, detectOllamaModels } = useSettingsStore();
+  const { 
+    llmProviders, 
+    defaultProvider, 
+    updateProvider, 
+    setDefaultProvider, 
+    detectOllamaModels,
+    updateAppSettings,
+    appSettings 
+  } = useSettingsStore();
+  
   const [testResults, setTestResults] = useState({});
-  const [isDetecting, setIsDetecting] = useState(false);
   const [showApiKeys, setShowApiKeys] = useState({});
 
   useEffect(() => {
     // Auto-detect Ollama models on component mount
+    console.log("LLMSettings mounted, detecting Ollama models...");
     handleDetectOllama();
   }, []);
 
   const handleDetectOllama = async () => {
-    setIsDetecting(true);
+    const ollama = llmProviders.ollama;
+    if (ollama.isAutoDetecting) {
+      console.log("Already detecting Ollama models, skipping...");
+      return;
+    }
+    
+    console.log("Starting Ollama model detection...");
+    setTestResults(prev => ({
+      ...prev,
+      ollama: { testing: true, message: 'Detecting models...' }
+    }));
+    
     try {
-      const models = await detectOllamaModels();
+      const models = await detectOllamaModels(true);
+      console.log("Detection complete, models:", models);
+      
       if (models.length > 0) {
         setTestResults(prev => ({
           ...prev,
@@ -30,16 +52,19 @@ function LLMSettings() {
       } else {
         setTestResults(prev => ({
           ...prev,
-          ollama: { success: false, message: 'No models found. Make sure Ollama is running.' }
+          ollama: { 
+            success: false, 
+            message: ollama.connectionError || 'No models found. Make sure Ollama is running and you have pulled at least one model.'
+          }
         }));
       }
     } catch (error) {
+      console.error("Error detecting Ollama models:", error);
       setTestResults(prev => ({
         ...prev,
-        ollama: { success: false, message: 'Ollama not available' }
+        ollama: { success: false, message: 'Failed to connect to Ollama' }
       }));
     }
-    setIsDetecting(false);
   };
 
   const handleProviderUpdate = (provider, field, value) => {
@@ -53,20 +78,60 @@ function LLMSettings() {
     }));
 
     try {
-      const result = await llmService.testConnection(provider);
-      setTestResults(prev => ({
-        ...prev,
-        [provider]: {
-          success: result.success,
-          message: result.success ? 'Connection successful' : result.error
+      // For Ollama, use a direct fetch instead of the service to ensure immediate feedback
+      if (provider === 'ollama') {
+        const providerData = llmProviders[provider];
+        if (!providerData.selectedModel) {
+          throw new Error('Please select a model first');
         }
-      }));
+        
+        console.log(`Testing connection to Ollama with model: ${providerData.selectedModel}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch(`${providerData.baseUrl}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: providerData.selectedModel,
+            prompt: "Say hello",
+            options: { temperature: 0.7, num_predict: 10 },
+            stream: false
+          }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status} ${response.statusText}`);
+        }
+        
+        setTestResults(prev => ({
+          ...prev,
+          [provider]: {
+            success: true,
+            message: 'Connection successful'
+          }
+        }));
+      } else {
+        // For other providers, use the service
+        const result = await llmService.testConnection(provider);
+        setTestResults(prev => ({
+          ...prev,
+          [provider]: {
+            success: result.success,
+            message: result.success ? 'Connection successful' : result.error
+          }
+        }));
+      }
     } catch (error) {
+      console.error(`Error testing connection to ${provider}:`, error);
       setTestResults(prev => ({
         ...prev,
         [provider]: {
           success: false,
-          message: error.message
+          message: error.message || 'Connection failed'
         }
       }));
     }
@@ -164,12 +229,12 @@ function LLMSettings() {
                 {providerId === 'ollama' && (
                   <button
                     onClick={handleDetectOllama}
-                    disabled={isDetecting}
+                    disabled={provider.isAutoDetecting}
                     className="text-indigo-400 hover:text-indigo-300 text-sm flex items-center gap-1"
                   >
                     <SafeIcon 
                       icon={FiRefreshCw} 
-                      className={`w-4 h-4 ${isDetecting ? 'animate-spin' : ''}`} 
+                      className={`w-4 h-4 ${provider.isAutoDetecting ? 'animate-spin' : ''}`} 
                     />
                     Detect Models
                   </button>
@@ -241,6 +306,29 @@ function LLMSettings() {
         <p className="text-slate-400">Configure your language model providers and connections</p>
       </div>
 
+      {/* Auto-connect setting */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <SafeIcon icon={FiSettings} className="w-5 h-5 text-blue-400" />
+            <h3 className="text-white font-medium">Auto-Connect on Startup</h3>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={appSettings.autoConnectOnStartup}
+              onChange={(e) => updateAppSettings({ autoConnectOnStartup: e.target.checked })}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+          </label>
+        </div>
+        <p className="text-slate-400 text-sm mt-2">
+          Automatically detect and connect to available LLM providers when the application starts
+        </p>
+      </div>
+
+      {/* Troubleshooting tips */}
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
         <div className="flex items-center gap-2 mb-2">
           <SafeIcon icon={FiAlertCircle} className="w-5 h-5 text-blue-400" />
@@ -259,13 +347,15 @@ function LLMSettings() {
         )}
       </div>
 
-      {/* Quick Setup for Ollama */}
+      {/* Ollama Troubleshooting */}
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-        <h3 className="text-white font-medium mb-2">Quick Ollama Setup</h3>
+        <h3 className="text-white font-medium mb-2">Ollama Setup Guide</h3>
         <div className="text-slate-300 text-sm space-y-2">
           <p>1. Install Ollama: <code className="bg-slate-700 px-2 py-1 rounded">curl -fsSL https://ollama.ai/install.sh | sh</code></p>
-          <p>2. Pull a model: <code className="bg-slate-700 px-2 py-1 rounded">ollama pull llama2</code></p>
-          <p>3. Click "Detect Models" above to auto-configure</p>
+          <p>2. Make sure the Ollama service is running: <code className="bg-slate-700 px-2 py-1 rounded">ollama serve</code></p>
+          <p>3. Pull a model: <code className="bg-slate-700 px-2 py-1 rounded">ollama pull llama2</code></p>
+          <p>4. Click "Detect Models" above to auto-configure</p>
+          <p className="text-yellow-400">Troubleshooting: If models aren't detected, verify Ollama is running and accessible at http://localhost:11434</p>
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
+import ConnectionStatusIndicator from './ConnectionStatusIndicator';
 import SafeIcon from '../../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 
@@ -43,7 +44,7 @@ function Header() {
   const getPageTitle = () => {
     if (location.pathname === '/dashboard') return 'Dashboard';
     if (location.pathname === '/settings') return 'Settings';
-    
+
     if (currentWorkspace) {
       if (location.pathname.endsWith(`/workspace/${workspaceId}`)) return currentWorkspace.name;
       if (location.pathname.includes(`/workspace/${workspaceId}/agents`)) return 'Agent Management';
@@ -55,7 +56,6 @@ function Header() {
       if (location.pathname.includes(`/workspace/${workspaceId}/team`)) return 'Team Management';
       if (location.pathname.includes(`/workspace/${workspaceId}/analytics`)) return 'Analytics Dashboard';
     }
-    
     return 'ApexSprite';
   };
 
@@ -70,7 +70,7 @@ function Header() {
         {/* Search */}
         <div className="flex-1 max-w-md mx-auto">
           <div className="relative">
-            <SafeIcon 
+            <SafeIcon
               icon={FiSearch}
               className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5"
             />
@@ -84,16 +84,19 @@ function Header() {
 
         {/* Right Section */}
         <div className="flex items-center gap-4">
+          {/* Connection Status */}
+          <ConnectionStatusIndicator />
+          
           {/* Notifications */}
           <div className="relative">
-            <button 
+            <button
               className="relative p-2 text-slate-400 hover:text-white transition-colors"
               onClick={() => setShowNotifications(!showNotifications)}
             >
               <SafeIcon icon={FiBell} className="w-6 h-6" />
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
             </button>
-            
+
             {showNotifications && (
               <div className="absolute right-0 mt-2 w-80 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-50">
                 <div className="p-3 border-b border-slate-700 flex justify-between items-center">
@@ -102,8 +105,8 @@ function Header() {
                 </div>
                 <div className="max-h-80 overflow-y-auto">
                   {notifications.map(notification => (
-                    <div 
-                      key={notification.id} 
+                    <div
+                      key={notification.id}
                       className={`p-3 border-b border-slate-700 hover:bg-slate-700/50 ${!notification.read ? 'bg-slate-700/20' : ''}`}
                     >
                       <div className="flex justify-between">
@@ -127,11 +130,7 @@ function Header() {
               onClick={() => setShowUserMenu(!showUserMenu)}
               className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-700 transition-colors"
             >
-              <img
-                src={user?.avatar}
-                alt={user?.name}
-                className="w-8 h-8 rounded-full"
-              />
+              <img src={user?.avatar} alt={user?.name} className="w-8 h-8 rounded-full" />
               <span className="text-white font-medium">{user?.name}</span>
               <SafeIcon icon={FiChevronDown} className="w-4 h-4 text-slate-400" />
             </button>

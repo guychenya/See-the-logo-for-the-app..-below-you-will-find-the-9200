@@ -1,22 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAgentStore } from '../../stores/agentStore';
 import { llmService } from '../../services/llmService';
+import { useSettingsStore } from '../../stores/settingsStore';
 import SafeIcon from '../../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 
-const { FiX, FiZap, FiRefreshCw, FiCheck, FiPlus, FiMinus } = FiIcons;
+const { FiX, FiZap, FiRefreshCw, FiCheck, FiPlus, FiAlertCircle } = FiIcons;
 
 function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null }) {
   const { createAgent } = useAgentStore();
+  const { getActiveProvider } = useSettingsStore();
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [description, setDescription] = useState('');
   const [generatedConfig, setGeneratedConfig] = useState(null);
   const [selectedSubAgents, setSelectedSubAgents] = useState([]);
+  const [connectionError, setConnectionError] = useState(null);
+
+  useEffect(() => {
+    // Check for active provider on component mount
+    checkLLMConnection();
+  }, []);
+
+  const checkLLMConnection = () => {
+    const activeProvider = getActiveProvider();
+    if (!activeProvider) {
+      setConnectionError("No active LLM provider configured. Please set up an LLM provider in Settings.");
+    } else if (!activeProvider.selectedModel) {
+      setConnectionError(`${activeProvider.name} is enabled but no model is selected. Please select a model in Settings.`);
+    } else {
+      setConnectionError(null);
+    }
+  };
 
   const handleGenerateConfig = async () => {
     if (!description.trim()) return;
+
+    // Check connection again before generating
+    const activeProvider = getActiveProvider();
+    if (!activeProvider || !activeProvider.selectedModel) {
+      checkLLMConnection();
+      return;
+    }
 
     setIsGenerating(true);
     try {
@@ -26,7 +52,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
     } catch (error) {
       console.error('Error generating agent config:', error);
       // Fallback to manual creation
-      alert('AI generation failed. Please try again or create manually.');
+      setConnectionError(`AI generation failed: ${error.message}. Please try again or create manually.`);
     } finally {
       setIsGenerating(false);
     }
@@ -83,6 +109,22 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
 
   const renderStep1 = () => (
     <div className="space-y-6">
+      {connectionError && (
+        <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
+          <SafeIcon icon={FiAlertCircle} className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <h4 className="text-red-400 font-medium">Connection Error</h4>
+            <p className="text-red-300/80 text-sm mt-1">{connectionError}</p>
+            <button 
+              onClick={() => window.location.href = '#/settings'}
+              className="text-red-400 hover:text-red-300 text-sm mt-2 underline"
+            >
+              Go to Settings
+            </button>
+          </div>
+        </div>
+      )}
+
       <div>
         <h3 className="text-lg font-medium text-white mb-2">Describe Your Agent</h3>
         <p className="text-slate-400 text-sm mb-4">
@@ -111,7 +153,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
       <div className="flex justify-end">
         <button
           onClick={handleGenerateConfig}
-          disabled={!description.trim() || isGenerating}
+          disabled={!description.trim() || isGenerating || connectionError}
           className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
         >
           {isGenerating ? (

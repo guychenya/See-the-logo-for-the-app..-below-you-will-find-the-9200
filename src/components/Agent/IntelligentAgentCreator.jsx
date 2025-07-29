@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useAgentStore } from '../../stores/agentStore';
 import { llmService } from '../../services/llmService';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -9,6 +10,7 @@ import * as FiIcons from 'react-icons/fi';
 const { FiX, FiZap, FiRefreshCw, FiCheck, FiPlus, FiAlertCircle } = FiIcons;
 
 function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null }) {
+  const navigate = useNavigate();
   const { createAgent } = useAgentStore();
   const { getActiveProvider } = useSettingsStore();
   const [step, setStep] = useState(1);
@@ -32,6 +34,11 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
     } else {
       setConnectionError(null);
     }
+  };
+
+  const handleGoToSettings = () => {
+    onClose();
+    navigate('/settings');
   };
 
   const handleGenerateConfig = async () => {
@@ -89,7 +96,6 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
         parentId: createdAgent.id,
         settings: generatedConfig.settings || {}
       };
-      
       createAgent(subAgentData);
     });
 
@@ -116,7 +122,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
             <h4 className="text-red-400 font-medium">Connection Error</h4>
             <p className="text-red-300/80 text-sm mt-1">{connectionError}</p>
             <button 
-              onClick={() => window.location.href = '#/settings'}
+              onClick={handleGoToSettings}
               className="text-red-400 hover:text-red-300 text-sm mt-2 underline"
             >
               Go to Settings
@@ -130,7 +136,6 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
         <p className="text-slate-400 text-sm mb-4">
           Tell me what you want your agent to do. I'll generate a complete configuration for you.
         </p>
-        
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -185,7 +190,6 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
         {/* Main Agent Config */}
         <div className="space-y-4">
           <h4 className="text-white font-medium">Main Agent</h4>
-          
           <div className="bg-slate-700 rounded-lg p-4">
             <div className="space-y-3">
               <div>
@@ -197,7 +201,6 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
                   className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>
                 <textarea
@@ -207,7 +210,6 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
                   rows="3"
                 />
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Type</label>
                 <select
@@ -219,7 +221,6 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
                   <option value="specialized">Specialized Agent</option>
                 </select>
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Capabilities</label>
                 <div className="flex flex-wrap gap-2">
@@ -247,7 +248,6 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
         {/* Sub-Agents */}
         <div className="space-y-4">
           <h4 className="text-white font-medium">Suggested Sub-Agents</h4>
-          
           {generatedConfig?.suggestedSubAgents?.length > 0 ? (
             <div className="space-y-3">
               {generatedConfig.suggestedSubAgents.map((subAgent, index) => (
@@ -296,7 +296,6 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
         >
           Back
         </button>
-        
         <button
           onClick={handleCreateAgent}
           className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2"
@@ -320,10 +319,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
             <h2 className="text-xl font-semibold text-white">Intelligent Agent Creator</h2>
             <p className="text-slate-400 text-sm">Describe your needs and I'll create the perfect agent for you</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white"
-          >
+          <button onClick={onClose} className="text-slate-400 hover:text-white">
             <SafeIcon icon={FiX} className="w-6 h-6" />
           </button>
         </div>

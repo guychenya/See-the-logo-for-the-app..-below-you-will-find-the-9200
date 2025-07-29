@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useSettingsStore } from '../../stores/settingsStore';
 import SafeIcon from '../../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
@@ -7,6 +8,7 @@ import * as FiIcons from 'react-icons/fi';
 const { FiBrain, FiCheck, FiX, FiAlertCircle, FiLoader } = FiIcons;
 
 function ConnectionStatusIndicator() {
+  const navigate = useNavigate();
   const { llmProviders, defaultProvider, detectOllamaModels } = useSettingsStore();
   const [showStatus, setShowStatus] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState({
@@ -20,16 +22,14 @@ function ConnectionStatusIndicator() {
   useEffect(() => {
     // Check connection on component mount and whenever default provider changes
     checkConnection();
-    
     // Set up interval to periodically check connection (every 60 seconds)
     const interval = setInterval(checkConnection, 60000);
-    
     return () => clearInterval(interval);
   }, [defaultProvider]);
 
   const checkConnection = async () => {
     setConnectionStatus(prev => ({ ...prev, isChecking: true }));
-    
+
     const activeProvider = llmProviders[defaultProvider];
     if (!activeProvider || !activeProvider.enabled) {
       setConnectionStatus({
@@ -47,7 +47,6 @@ function ConnectionStatusIndicator() {
       try {
         console.log("ConnectionStatusIndicator: Checking Ollama connection...");
         const models = await detectOllamaModels();
-        
         setConnectionStatus({
           isChecking: false,
           isConnected: models.length > 0,
@@ -72,8 +71,7 @@ function ConnectionStatusIndicator() {
         isConnected: !!activeProvider.apiKey && !!activeProvider.selectedModel,
         provider: defaultProvider,
         model: activeProvider.selectedModel,
-        error: !activeProvider.apiKey ? 'API key required' : 
-               !activeProvider.selectedModel ? 'No model selected' : null
+        error: !activeProvider.apiKey ? 'API key required' : !activeProvider.selectedModel ? 'No model selected' : null
       });
     }
   };
@@ -94,7 +92,7 @@ function ConnectionStatusIndicator() {
         textClass: 'text-blue-400'
       };
     }
-    
+
     if (connectionStatus.isConnected) {
       return {
         icon: FiCheck,
@@ -103,7 +101,7 @@ function ConnectionStatusIndicator() {
         textClass: 'text-green-400'
       };
     }
-    
+
     return {
       icon: connectionStatus.error ? FiAlertCircle : FiX,
       iconClass: 'text-red-400',
@@ -114,9 +112,19 @@ function ConnectionStatusIndicator() {
 
   const statusInfo = getStatusInfo();
 
+  const handleGoToSettings = () => {
+    setShowStatus(false);
+    navigate('/settings');
+  };
+
+  const handleRefresh = () => {
+    checkConnection();
+    setShowStatus(false);
+  };
+
   return (
     <div className="relative">
-      <button 
+      <button
         onClick={() => setShowStatus(!showStatus)}
         className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm hover:bg-slate-700/50 transition-colors"
       >
@@ -126,9 +134,9 @@ function ConnectionStatusIndicator() {
         />
         <span className="text-slate-300">LLM</span>
       </button>
-      
+
       {showStatus && (
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="absolute right-0 mt-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-lg p-3 z-50"
@@ -137,31 +145,34 @@ function ConnectionStatusIndicator() {
             <div className="flex items-center gap-2">
               <SafeIcon icon={statusInfo.icon} className={`w-5 h-5 ${statusInfo.iconClass}`} />
               <span className={`font-medium ${statusInfo.textClass}`}>
-                {connectionStatus.isChecking ? 'Checking connection...' :
-                 connectionStatus.isConnected ? 'Connected' : 'Not connected'}
+                {connectionStatus.isChecking 
+                  ? 'Checking connection...' 
+                  : connectionStatus.isConnected 
+                    ? 'Connected' 
+                    : 'Not connected'
+                }
               </span>
             </div>
             {!connectionStatus.isChecking && (
               <div className="mt-1 text-sm text-slate-300">
                 <div>Provider: {getProviderDisplayName()}</div>
                 {connectionStatus.model && <div>Model: {connectionStatus.model}</div>}
-                {connectionStatus.error && <div className="text-red-400 text-xs mt-1">{connectionStatus.error}</div>}
+                {connectionStatus.error && (
+                  <div className="text-red-400 text-xs mt-1">{connectionStatus.error}</div>
+                )}
               </div>
             )}
           </div>
-          
+
           <div className="flex justify-between">
-            <button 
-              onClick={() => {
-                checkConnection();
-                setShowStatus(false);
-              }}
+            <button
+              onClick={handleRefresh}
               className="text-indigo-400 hover:text-indigo-300 text-sm"
             >
               Refresh
             </button>
-            <button 
-              onClick={() => window.location.href = '#/settings'}
+            <button
+              onClick={handleGoToSettings}
               className="text-indigo-400 hover:text-indigo-300 text-sm"
             >
               Go to Settings

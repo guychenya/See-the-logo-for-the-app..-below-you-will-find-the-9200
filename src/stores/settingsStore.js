@@ -106,11 +106,13 @@ export const useSettingsStore = create(
 
         try {
           console.log('Attempting to fetch Ollama models...');
+          
           // Use the fetch API with a timeout to prevent hanging
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
           
-          const response = await fetch('http://localhost:11434/api/tags', {
+          // IMPORTANT: Changed from /api/tags to /api/models which is the correct endpoint
+          const response = await fetch(`${ollama.baseUrl}/api/models`, {
             signal: controller.signal
           });
           
@@ -124,7 +126,7 @@ export const useSettingsStore = create(
           console.log('Ollama API response:', data);
           
           // Check if models array exists and has items
-          if (!data.models || !Array.isArray(data.models) || data.models.length === 0) {
+          if (!data.models || !Array.isArray(data.models)) {
             set(state => ({
               llmProviders: {
                 ...state.llmProviders,
@@ -140,7 +142,7 @@ export const useSettingsStore = create(
           }
           
           // Extract model names
-          const models = data.models.map(model => model.name);
+          const models = data.models.map(model => typeof model === 'string' ? model : model.name);
           
           console.log('Found models:', models);
           

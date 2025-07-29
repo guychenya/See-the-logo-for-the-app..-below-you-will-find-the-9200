@@ -20,6 +20,7 @@ function LLMSettings() {
   
   const [testResults, setTestResults] = useState({});
   const [showApiKeys, setShowApiKeys] = useState({});
+  const [debugInfo, setDebugInfo] = useState("");
 
   useEffect(() => {
     // Auto-detect Ollama models on component mount
@@ -29,12 +30,17 @@ function LLMSettings() {
 
   const handleDetectOllama = async () => {
     const ollama = llmProviders.ollama;
+    setDebugInfo("");
+    
     if (ollama.isAutoDetecting) {
       console.log("Already detecting Ollama models, skipping...");
+      setDebugInfo("Already detecting models...");
       return;
     }
     
     console.log("Starting Ollama model detection...");
+    setDebugInfo("Starting model detection...");
+    
     setTestResults(prev => ({
       ...prev,
       ollama: { testing: true, message: 'Detecting models...' }
@@ -43,6 +49,7 @@ function LLMSettings() {
     try {
       const models = await detectOllamaModels(true);
       console.log("Detection complete, models:", models);
+      setDebugInfo(`Detection complete. Found: ${models.join(', ')}`);
       
       if (models.length > 0) {
         setTestResults(prev => ({
@@ -57,6 +64,7 @@ function LLMSettings() {
             message: ollama.connectionError || 'No models found. Make sure Ollama is running and you have pulled at least one model.'
           }
         }));
+        setDebugInfo(`Error: ${ollama.connectionError || 'No models found'}`);
       }
     } catch (error) {
       console.error("Error detecting Ollama models:", error);
@@ -64,6 +72,7 @@ function LLMSettings() {
         ...prev,
         ollama: { success: false, message: 'Failed to connect to Ollama' }
       }));
+      setDebugInfo(`Error: ${error.message}`);
     }
   };
 
@@ -87,7 +96,7 @@ function LLMSettings() {
         
         console.log(`Testing connection to Ollama with model: ${providerData.selectedModel}`);
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         
         const response = await fetch(`${providerData.baseUrl}/api/generate`, {
           method: 'POST',
@@ -347,6 +356,14 @@ function LLMSettings() {
         )}
       </div>
 
+      {/* Debug Info */}
+      {debugInfo && (
+        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+          <h3 className="text-white font-medium mb-2">Debug Info</h3>
+          <pre className="text-slate-300 text-sm whitespace-pre-wrap">{debugInfo}</pre>
+        </div>
+      )}
+
       {/* Ollama Troubleshooting */}
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
         <h3 className="text-white font-medium mb-2">Ollama Setup Guide</h3>
@@ -355,7 +372,8 @@ function LLMSettings() {
           <p>2. Make sure the Ollama service is running: <code className="bg-slate-700 px-2 py-1 rounded">ollama serve</code></p>
           <p>3. Pull a model: <code className="bg-slate-700 px-2 py-1 rounded">ollama pull llama2</code></p>
           <p>4. Click "Detect Models" above to auto-configure</p>
-          <p className="text-yellow-400">Troubleshooting: If models aren't detected, verify Ollama is running and accessible at http://localhost:11434</p>
+          <p className="text-yellow-400">Troubleshooting: If models aren't detected, verify Ollama is running and accessible at http://localhost:11434/api/models</p>
+          <p className="text-yellow-400">You can manually check by opening this URL in your browser: <a href="http://localhost:11434/api/models" target="_blank" rel="noopener noreferrer" className="underline">http://localhost:11434/api/models</a></p>
         </div>
       </div>
     </div>

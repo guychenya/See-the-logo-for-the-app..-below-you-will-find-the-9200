@@ -34,11 +34,12 @@ function App() {
     // Auto-connect to LLM providers if the user is authenticated
     if (user) {
       console.log('User authenticated, auto-connecting to LLM providers...');
+      // Increased timeout to ensure UI is fully loaded
       setTimeout(() => {
         autoConnectProviders().catch(err => {
           console.error('Error auto-connecting to LLM providers:', err);
         });
-      }, 1000); // Small delay to ensure UI is loaded first
+      }, 2000); // Increased from 1000ms to 2000ms
     }
   }, [user, autoConnectProviders]);
 

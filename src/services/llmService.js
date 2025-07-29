@@ -199,17 +199,31 @@ Make the configuration detailed, practical, and tailored to the specific use cas
       }
 
       let testPrompt = "Hello, this is a connection test. Please respond with 'Connection successful'.";
-      let response;
 
       // Different testing methods for different providers
       switch (provider) {
         case 'ollama':
           console.log(`Testing Ollama with model: ${providerData.selectedModel}`);
           try {
+            // First check if the models API endpoint is accessible
+            const modelsController = new AbortController();
+            const modelsTimeoutId = setTimeout(() => modelsController.abort(), 5000);
+            
+            const modelsResponse = await fetch(`${providerData.baseUrl}/api/models`, {
+              signal: modelsController.signal
+            });
+            
+            clearTimeout(modelsTimeoutId);
+            
+            if (!modelsResponse.ok) {
+              throw new Error(`Models API error: ${modelsResponse.status} - Unable to access Ollama models API`);
+            }
+            
+            // Now test generation
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 10000);
             
-            response = await fetch(`${providerData.baseUrl}/api/generate`, {
+            const response = await fetch(`${providerData.baseUrl}/api/generate`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -237,7 +251,7 @@ Make the configuration detailed, practical, and tailored to the specific use cas
           }
           
         case 'openai':
-          response = await fetch(`${providerData.baseUrl}/chat/completions`, {
+          const response = await fetch(`${providerData.baseUrl}/chat/completions`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -250,7 +264,12 @@ Make the configuration detailed, practical, and tailored to the specific use cas
             }),
             signal: AbortSignal.timeout(10000)
           });
-          break;
+          
+          if (!response.ok) {
+            throw new Error(`API error: ${response.status} ${response.statusText}`);
+          }
+          
+          return { success: true, message: "Connection successful" };
           
         // Add other provider test methods as needed
         
@@ -259,12 +278,6 @@ Make the configuration detailed, practical, and tailored to the specific use cas
           const result = await this.generateCompletion(testPrompt, { maxTokens: 50 });
           return { success: true, response: result };
       }
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
-      }
-
-      return { success: true, message: "Connection successful" };
     } catch (error) {
       console.error("Connection test error:", error);
       return { 

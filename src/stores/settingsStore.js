@@ -77,34 +77,34 @@ export const useSettingsStore = create(
 
       // Detect Ollama Models
       detectOllamaModels: async (forceRefresh = false) => {
-        const state = get();
-        const ollama = state.llmProviders.ollama;
-
-        // Skip if we've attempted detection recently (within 30 seconds) unless forced
-        const now = Date.now();
-        if (
-          !forceRefresh && 
-          ollama.lastDetectionAttempt && 
-          (now - ollama.lastDetectionAttempt < 30000) &&
-          ollama.isAutoDetecting
-        ) {
-          return ollama.models;
-        }
-
-        // Mark as detecting
-        set(state => ({
-          llmProviders: {
-            ...state.llmProviders,
-            ollama: {
-              ...state.llmProviders.ollama,
-              isAutoDetecting: true,
-              lastDetectionAttempt: now,
-              connectionError: null
-            }
-          }
-        }));
-
         try {
+          const state = get();
+          const ollama = state.llmProviders.ollama;
+
+          // Skip if we've attempted detection recently (within 30 seconds) unless forced
+          const now = Date.now();
+          if (
+            !forceRefresh && 
+            ollama.lastDetectionAttempt && 
+            (now - ollama.lastDetectionAttempt < 30000) &&
+            ollama.isAutoDetecting
+          ) {
+            return ollama.models;
+          }
+
+          // Mark as detecting
+          set(state => ({
+            llmProviders: {
+              ...state.llmProviders,
+              ollama: {
+                ...state.llmProviders.ollama,
+                isAutoDetecting: true,
+                lastDetectionAttempt: now,
+                connectionError: null
+              }
+            }
+          }));
+
           console.log('Attempting to fetch Ollama models...');
           
           // Use the fetch API with a timeout to prevent hanging
@@ -115,9 +115,12 @@ export const useSettingsStore = create(
           try {
             const modelsResponse = await fetch(`${ollama.baseUrl}/api/models`, {
               signal: controller.signal
+            }).catch(err => {
+              console.log('Error fetching models:', err);
+              throw err;
             });
             
-            if (modelsResponse.ok) {
+            if (modelsResponse?.ok) {
               clearTimeout(timeoutId);
               const data = await modelsResponse.json();
               console.log('Ollama API response from /api/models:', data);
@@ -150,122 +153,106 @@ export const useSettingsStore = create(
             throw new Error('Models endpoint failed, trying fallback');
           } catch (firstError) {
             // Try the older /api/tags endpoint as fallback
-            console.log('Trying fallback to /api/tags endpoint...');
-            const tagsResponse = await fetch(`${ollama.baseUrl}/api/tags`, {
-              signal: controller.signal
-            });
-            
-            clearTimeout(timeoutId);
-            
-            if (!tagsResponse.ok) {
-              throw new Error(`Failed to fetch models: ${tagsResponse.status} ${tagsResponse.statusText}`);
-            }
-            
-            const tagsData = await tagsResponse.json();
-            console.log('Ollama API response from /api/tags:', tagsData);
-            
-            // Check if models array exists and has items
-            if (!tagsData.models && !Array.isArray(tagsData.models) && !tagsData.tags) {
-              // Try one more fallback - just list the models from user's models directory
-              console.log('Trying direct model list endpoint...');
-              
-              // Last attempt - try a simple ping to see if Ollama is running
-              const pingResponse = await fetch(`${ollama.baseUrl}/api/version`, {
-                signal: AbortSignal.timeout(5000)
+            try {
+              console.log('Trying fallback to /api/tags endpoint...');
+              const tagsResponse = await fetch(`${ollama.baseUrl}/api/tags`, {
+                signal: controller.signal
+              }).catch(err => {
+                console.log('Error fetching tags:', err);
+                throw err;
               });
               
-              if (pingResponse.ok) {
-                const pingData = await pingResponse.json();
-                console.log('Ollama is running, version:', pingData.version);
+              clearTimeout(timeoutId);
+              
+              if (tagsResponse?.ok) {
+                const tagsData = await tagsResponse.json();
+                console.log('Ollama API response from /api/tags:', tagsData);
+                
+                // Check if models array exists and has items
+                if (!tagsData.models && !Array.isArray(tagsData.models) && !tagsData.tags) {
+                  // Try one more fallback - just list the models from user's models directory
+                  console.log('Trying direct model list endpoint...');
+                  
+                  // Last attempt - try a simple ping to see if Ollama is running
+                  try {
+                    const pingResponse = await fetch(`${ollama.baseUrl}/api/version`, {
+                      signal: AbortSignal.timeout(5000)
+                    });
+                    
+                    if (pingResponse?.ok) {
+                      const pingData = await pingResponse.json();
+                      console.log('Ollama is running, version:', pingData.version);
+                      
+                      set(state => ({
+                        llmProviders: {
+                          ...state.llmProviders,
+                          ollama: {
+                            ...state.llmProviders.ollama,
+                            isAutoDetecting: false,
+                            connectionError: 'Connected to Ollama server, but no models found. Please pull models using the Ollama CLI (e.g., `ollama pull llama2`).',
+                            models: []
+                          }
+                        }
+                      }));
+                      return [];
+                    } else {
+                      throw new Error('No models found. Please pull models using the Ollama CLI.');
+                    }
+                  } catch (pingError) {
+                    console.log('Ping error:', pingError);
+                    throw pingError;
+                  }
+                }
+                
+                // Extract model names from older API format
+                let models = [];
+                if (tagsData.models && Array.isArray(tagsData.models)) {
+                  models = tagsData.models;
+                } else if (tagsData.tags && Array.isArray(tagsData.tags)) {
+                  models = tagsData.tags;
+                }
+                
+                console.log('Found models via fallback:', models);
                 
                 set(state => ({
                   llmProviders: {
                     ...state.llmProviders,
                     ollama: {
                       ...state.llmProviders.ollama,
+                      models,
+                      selectedModel: models[0] || '',
+                      enabled: models.length > 0,
                       isAutoDetecting: false,
-                      connectionError: 'Connected to Ollama server, but no models found. Please pull models using the Ollama CLI (e.g., `ollama pull llama2`).',
-                      models: []
+                      connectionError: null
                     }
                   }
                 }));
-                return [];
+                
+                return models;
               } else {
-                throw new Error('No models found. Please pull models using the Ollama CLI.');
+                throw new Error(`Failed to fetch models: ${tagsResponse?.status || 'Unknown error'}`);
               }
+            } catch (tagsError) {
+              console.log('Tags error:', tagsError);
+              throw tagsError;
             }
-            
-            // Extract model names from older API format
-            let models = [];
-            if (tagsData.models && Array.isArray(tagsData.models)) {
-              models = tagsData.models;
-            } else if (tagsData.tags && Array.isArray(tagsData.tags)) {
-              models = tagsData.tags;
-            }
-            
-            console.log('Found models via fallback:', models);
-            
-            set(state => ({
-              llmProviders: {
-                ...state.llmProviders,
-                ollama: {
-                  ...state.llmProviders.ollama,
-                  models,
-                  selectedModel: models[0] || '',
-                  enabled: models.length > 0,
-                  isAutoDetecting: false,
-                  connectionError: null
-                }
-              }
-            }));
-            
-            return models;
           }
         } catch (error) {
           console.error('Ollama detection error:', error);
           
-          // Try a simple ping to see if Ollama is even running
-          try {
-            const pingResponse = await fetch(`${ollama.baseUrl}`, {
-              signal: AbortSignal.timeout(3000)
-            });
-            
-            if (pingResponse.ok) {
-              set(state => ({
-                llmProviders: {
-                  ...state.llmProviders,
-                  ollama: {
-                    ...state.llmProviders.ollama,
-                    isAutoDetecting: false,
-                    connectionError: 'Connected to Ollama server, but could not retrieve models. Please ensure you have models pulled (e.g., `ollama pull llama2`).'
-                  }
-                }
-              }));
-            } else {
-              set(state => ({
-                llmProviders: {
-                  ...state.llmProviders,
-                  ollama: {
-                    ...state.llmProviders.ollama,
-                    isAutoDetecting: false,
-                    connectionError: 'Could not connect to Ollama server. Please ensure Ollama is running with `ollama serve`.'
-                  }
-                }
-              }));
-            }
-          } catch (pingError) {
-            set(state => ({
-              llmProviders: {
-                ...state.llmProviders,
-                ollama: {
-                  ...state.llmProviders.ollama,
-                  isAutoDetecting: false,
-                  connectionError: 'Failed to connect to Ollama server. Please make sure it is running with `ollama serve`.'
-                }
+          // Set error state
+          set(state => ({
+            llmProviders: {
+              ...state.llmProviders,
+              ollama: {
+                ...state.llmProviders.ollama,
+                isAutoDetecting: false,
+                connectionError: error.message || 'Failed to connect to Ollama server. Please make sure it is running with `ollama serve`.'
               }
-            }));
-          }
+            }
+          }));
           
+          // Return empty array for models
           return [];
         }
       },
@@ -275,8 +262,12 @@ export const useSettingsStore = create(
         if (!get().appSettings.autoConnectOnStartup) return;
         
         console.log('Auto-connecting to LLM providers...');
-        // Start with Ollama as it's the preferred local option
-        await get().detectOllamaModels(true);
+        try {
+          // Start with Ollama as it's the preferred local option
+          await get().detectOllamaModels(true);
+        } catch (err) {
+          console.error('Error auto-connecting to Ollama:', err);
+        }
         
         // Future: Add auto-connection logic for other providers if API keys are stored
       },
@@ -334,7 +325,14 @@ export const useSettingsStore = create(
         llmProviders: state.llmProviders,
         defaultProvider: state.defaultProvider,
         appSettings: state.appSettings
-      })
+      }),
+      // Add error handling for storage issues
+      onRehydrateStorage: () => (state) => {
+        console.log('Settings store rehydrated');
+        if (!state) {
+          console.error('Failed to rehydrate settings store');
+        }
+      }
     }
   )
 );

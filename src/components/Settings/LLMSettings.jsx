@@ -22,11 +22,16 @@ function LLMSettings() {
   const [showApiKeys, setShowApiKeys] = useState({});
   const [debugInfo, setDebugInfo] = useState("");
   const [ollamaModelPath, setOllamaModelPath] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Auto-detect Ollama models on component mount
-    console.log("LLMSettings mounted, detecting Ollama models...");
-    handleDetectOllama();
+    // Add a short delay to ensure store is initialized properly
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+      // Auto-detect Ollama models on component mount after a short delay
+      console.log("LLMSettings mounted, detecting Ollama models...");
+      handleDetectOllama();
+    }, 1000);
     
     // Suggest potential Ollama model path based on OS
     const isWindows = navigator.platform.indexOf('Win') > -1;
@@ -39,53 +44,66 @@ function LLMSettings() {
     } else {
       setOllamaModelPath("~/.ollama/models");
     }
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const handleDetectOllama = async () => {
-    const ollama = llmProviders.ollama;
-    setDebugInfo("");
-    
-    if (ollama.isAutoDetecting) {
-      console.log("Already detecting Ollama models, skipping...");
-      setDebugInfo("Already detecting models...");
-      return;
-    }
-    
-    console.log("Starting Ollama model detection...");
-    setDebugInfo("Starting model detection...");
-    
-    setTestResults(prev => ({
-      ...prev,
-      ollama: { testing: true, message: 'Detecting models...' }
-    }));
-    
     try {
-      const models = await detectOllamaModels(true);
-      console.log("Detection complete, models:", models);
-      
-      if (models.length > 0) {
-        setDebugInfo(`Detection complete. Found: ${models.join(', ')}`);
-        setTestResults(prev => ({
-          ...prev,
-          ollama: { success: true, message: `Found ${models.length} models` }
-        }));
-      } else {
-        setTestResults(prev => ({
-          ...prev,
-          ollama: { 
-            success: false, 
-            message: ollama.connectionError || 'No models found. Make sure Ollama is running and you have pulled at least one model.'
-          }
-        }));
-        setDebugInfo(`Error: ${ollama.connectionError || 'No models found'}`);
+      if (!llmProviders) {
+        console.error("LLM providers not initialized yet");
+        setDebugInfo("Error: LLM providers not initialized yet");
+        return;
       }
-    } catch (error) {
-      console.error("Error detecting Ollama models:", error);
+      
+      const ollama = llmProviders.ollama;
+      setDebugInfo("");
+      
+      if (ollama.isAutoDetecting) {
+        console.log("Already detecting Ollama models, skipping...");
+        setDebugInfo("Already detecting models...");
+        return;
+      }
+      
+      console.log("Starting Ollama model detection...");
+      setDebugInfo("Starting model detection...");
+      
       setTestResults(prev => ({
         ...prev,
-        ollama: { success: false, message: error.message || 'Failed to connect to Ollama' }
+        ollama: { testing: true, message: 'Detecting models...' }
       }));
-      setDebugInfo(`Error: ${error.message}`);
+      
+      try {
+        const models = await detectOllamaModels(true);
+        console.log("Detection complete, models:", models);
+        
+        if (models && models.length > 0) {
+          setDebugInfo(`Detection complete. Found: ${models.join(', ')}`);
+          setTestResults(prev => ({
+            ...prev,
+            ollama: { success: true, message: `Found ${models.length} models` }
+          }));
+        } else {
+          setTestResults(prev => ({
+            ...prev,
+            ollama: { 
+              success: false, 
+              message: ollama.connectionError || 'No models found. Make sure Ollama is running and you have pulled at least one model.'
+            }
+          }));
+          setDebugInfo(`Error: ${ollama.connectionError || 'No models found'}`);
+        }
+      } catch (error) {
+        console.error("Error detecting Ollama models:", error);
+        setTestResults(prev => ({
+          ...prev,
+          ollama: { success: false, message: error.message || 'Failed to connect to Ollama' }
+        }));
+        setDebugInfo(`Error: ${error.message}`);
+      }
+    } catch (error) {
+      console.error("Unexpected error in handleDetectOllama:", error);
+      setDebugInfo(`Unexpected error: ${error.message}`);
     }
   };
 
@@ -111,36 +129,41 @@ function LLMSettings() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
         
-        const response = await fetch(`${providerData.baseUrl}/api/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: providerData.selectedModel,
-            prompt: "Say hello",
-            options: { temperature: 0.7, num_predict: 10 },
-            stream: false
-          }),
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`API error: ${response.status} ${response.statusText} - ${errorText}`);
-        }
-        
-        const data = await response.json();
-        console.log("Ollama test response:", data);
-        
-        setTestResults(prev => ({
-          ...prev,
-          [provider]: {
-            success: true,
-            message: 'Connection successful',
-            response: data.response
+        try {
+          const response = await fetch(`${providerData.baseUrl}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: providerData.selectedModel,
+              prompt: "Say hello",
+              options: { temperature: 0.7, num_predict: 10 },
+              stream: false
+            }),
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API error: ${response.status} ${response.statusText} - ${errorText}`);
           }
-        }));
+          
+          const data = await response.json();
+          console.log("Ollama test response:", data);
+          
+          setTestResults(prev => ({
+            ...prev,
+            [provider]: {
+              success: true,
+              message: 'Connection successful',
+              response: data.response
+            }
+          }));
+        } catch (error) {
+          console.error("Ollama test error:", error);
+          throw error;
+        }
       } else {
         // For other providers, use the service
         const result = await llmService.testConnection(provider);
@@ -274,7 +297,7 @@ function LLMSettings() {
                 className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">Select a model</option>
-                {provider.models.map(model => (
+                {provider.models && provider.models.map(model => (
                   <option key={model} value={model}>{model}</option>
                 ))}
               </select>
@@ -326,6 +349,20 @@ function LLMSettings() {
     );
   };
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-white mb-2">LLM Provider Settings</h2>
+          <p className="text-slate-400">Loading provider settings...</p>
+        </div>
+        <div className="flex items-center justify-center h-32">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -343,7 +380,7 @@ function LLMSettings() {
           <label className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
-              checked={appSettings.autoConnectOnStartup}
+              checked={appSettings?.autoConnectOnStartup ?? true}
               onChange={(e) => updateAppSettings({ autoConnectOnStartup: e.target.checked })}
               className="sr-only peer"
             />
@@ -369,7 +406,7 @@ function LLMSettings() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {Object.entries(llmProviders).map(([providerId, provider]) =>
+        {llmProviders && Object.entries(llmProviders).map(([providerId, provider]) =>
           renderProviderCard(providerId, provider)
         )}
       </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAgentStore } from '../stores/agentStore';
@@ -17,71 +17,125 @@ function ChatInterface() {
   const { agents } = useAgentStore();
   const { addChatMessage, getChatHistory } = useContentStore();
   const { getActiveProvider } = useSettingsStore();
-  const agent = agents.find(a => a.id === agentId);
+  
+  const [agent, setAgent] = useState(null);
   const [input, setInput] = useState('');
   const [chatHistory, setChatHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [connectionError, setConnectionError] = useState(null);
+  const [mounted, setMounted] = useState(true);
+  
   const messagesEndRef = useRef(null);
 
+  // Safely find agent
   useEffect(() => {
-    if (agentId) {
-      const history = getChatHistory(agentId);
-      setChatHistory(history);
+    try {
+      if (agentId && agents && Array.isArray(agents)) {
+        const foundAgent = agents.find(a => a && a.id === agentId);
+        setAgent(foundAgent || null);
+      }
+    } catch (error) {
+      console.error('Error finding agent:', error);
+      setAgent(null);
     }
-  }, [agentId, getChatHistory]);
+  }, [agentId, agents]);
+
+  // Load chat history
+  useEffect(() => {
+    try {
+      if (agentId && getChatHistory && mounted) {
+        const history = getChatHistory(agentId);
+        if (Array.isArray(history)) {
+          setChatHistory(history);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+      setChatHistory([]);
+    }
+  }, [agentId, getChatHistory, mounted]);
+
+  // Auto-scroll to bottom
+  const scrollToBottom = useCallback(() => {
+    try {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } catch (error) {
+      console.error('Error scrolling to bottom:', error);
+    }
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [chatHistory]);
+  }, [chatHistory, scrollToBottom]);
 
+  // Check LLM provider configuration
   useEffect(() => {
-    // Check if LLM provider is configured
-    const provider = getActiveProvider();
-    if (!provider) {
-      setConnectionError('No LLM provider configured. Please configure Ollama or another provider in Settings.');
-    } else {
-      setConnectionError(null);
+    try {
+      if (getActiveProvider && mounted) {
+        const provider = getActiveProvider();
+        if (!provider) {
+          setConnectionError('No LLM provider configured. Please configure Ollama or another provider in Settings.');
+        } else {
+          setConnectionError(null);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking provider:', error);
+      setConnectionError('Error checking provider configuration.');
     }
-  }, [getActiveProvider]);
+  }, [getActiveProvider, mounted]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      setMounted(false);
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
-    const provider = getActiveProvider();
-    if (!provider) {
-      setConnectionError('No LLM provider configured. Please configure Ollama or another provider in Settings.');
-      return;
-    }
-
-    // Add user message
-    const userMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: input,
-      timestamp: new Date().toISOString()
-    };
-
-    setChatHistory(prev => [...prev, userMessage]);
-    addChatMessage(agentId, userMessage);
-    const currentInput = input;
-    setInput('');
-    setIsLoading(true);
-    setConnectionError(null);
+    
+    if (!input.trim() || isLoading || !mounted) return;
 
     try {
+      const provider = getActiveProvider();
+      if (!provider) {
+        setConnectionError('No LLM provider configured. Please configure Ollama or another provider in Settings.');
+        return;
+      }
+
+      if (!agent) {
+        console.error('No agent available');
+        return;
+      }
+
+      // Add user message
+      const userMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: input,
+        timestamp: new Date().toISOString()
+      };
+
+      setChatHistory(prev => [...prev, userMessage]);
+      if (addChatMessage) {
+        addChatMessage(agentId, userMessage);
+      }
+
+      const currentInput = input;
+      setInput('');
+      setIsLoading(true);
+      setConnectionError(null);
+
       // Generate agent response using the LLM service
       const agentResponse = await llmService.generateAgentResponse(
         agent,
         currentInput,
         chatHistory
       );
+
+      if (!mounted) return; // Check if component is still mounted
 
       const agentMessage = {
         id: (Date.now() + 1).toString(),
@@ -91,9 +145,13 @@ function ChatInterface() {
       };
 
       setChatHistory(prev => [...prev, agentMessage]);
-      addChatMessage(agentId, agentMessage);
+      if (addChatMessage) {
+        addChatMessage(agentId, agentMessage);
+      }
     } catch (error) {
       console.error('Error generating response:', error);
+      
+      if (!mounted) return;
       
       // Add error message
       const errorMessage = {
@@ -105,16 +163,49 @@ function ChatInterface() {
       };
 
       setChatHistory(prev => [...prev, errorMessage]);
-      addChatMessage(agentId, errorMessage);
+      if (addChatMessage) {
+        addChatMessage(agentId, errorMessage);
+      }
       setConnectionError(error.message);
     } finally {
-      setIsLoading(false);
+      if (mounted) {
+        setIsLoading(false);
+      }
     }
   };
 
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    // You could add a toast notification here
+  const copyToClipboard = async (text) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+    } catch (error) {
+      console.error('Failed to copy text:', error);
+    }
+  };
+
+  const handleNavigateBack = () => {
+    try {
+      navigate(`/workspace/${workspaceId}/agents`);
+    } catch (error) {
+      console.error('Navigation error:', error);
+    }
+  };
+
+  const handleNavigateSettings = () => {
+    try {
+      navigate('/settings');
+    } catch (error) {
+      console.error('Navigation error:', error);
+    }
   };
 
   if (!agent) {
@@ -124,7 +215,7 @@ function ChatInterface() {
           <h2 className="text-xl font-semibold text-white mb-2">Agent not found</h2>
           <p className="text-slate-400 mb-4">The agent you're looking for doesn't exist.</p>
           <button
-            onClick={() => navigate(`/workspace/${workspaceId}/agents`)}
+            onClick={handleNavigateBack}
             className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
           >
             Back to Agents
@@ -140,7 +231,7 @@ function ChatInterface() {
       <div className="bg-slate-800 border-b border-slate-700 p-4 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/workspace/${workspaceId}/agents`)}
+            onClick={handleNavigateBack}
             className="text-slate-400 hover:text-white transition-colors"
           >
             <SafeIcon icon={FiArrowLeft} className="w-5 h-5" />
@@ -149,7 +240,7 @@ function ChatInterface() {
             {agent.type === 'primary' ? '🎯' : '🤖'}
           </div>
           <div>
-            <h2 className="text-white font-semibold">{agent.name}</h2>
+            <h2 className="text-white font-semibold">{agent.name || 'Unknown Agent'}</h2>
             <div className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${connectionError ? 'bg-red-500' : 'bg-green-500'}`}></span>
               <span className="text-slate-400 text-xs">
@@ -177,7 +268,7 @@ function ChatInterface() {
             <SafeIcon icon={FiAlertTriangle} className="w-4 h-4" />
             <span>{connectionError}</span>
             <button
-              onClick={() => navigate('/settings')}
+              onClick={handleNavigateSettings}
               className="ml-auto text-red-300 hover:text-red-200 underline"
             >
               Configure Settings
@@ -196,9 +287,9 @@ function ChatInterface() {
                 <div className="bg-slate-800/50 rounded-lg p-6 text-center">
                   <h3 className="text-white font-medium mb-2">Welcome to Chat with {agent.name}</h3>
                   <p className="text-slate-400 text-sm mb-4">
-                    This agent can help you with: {agent.capabilities.join(', ')}
+                    This agent can help you with: {agent.capabilities?.join(', ') || 'various tasks'}
                   </p>
-                  {!connectionError && (
+                  {!connectionError && agent.capabilities && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg mx-auto">
                       {agent.capabilities.slice(0, 4).map((capability, index) => (
                         <button
@@ -327,15 +418,15 @@ function ChatInterface() {
                 <div className="space-y-3">
                   <div>
                     <div className="text-slate-400 text-xs">Name</div>
-                    <div className="text-white">{agent.name}</div>
+                    <div className="text-white">{agent.name || 'Unknown'}</div>
                   </div>
                   <div>
                     <div className="text-slate-400 text-xs">Type</div>
-                    <div className="text-white capitalize">{agent.type}</div>
+                    <div className="text-white capitalize">{agent.type || 'Unknown'}</div>
                   </div>
                   <div>
                     <div className="text-slate-400 text-xs">Description</div>
-                    <div className="text-slate-300 text-sm">{agent.description}</div>
+                    <div className="text-slate-300 text-sm">{agent.description || 'No description available'}</div>
                   </div>
                 </div>
               </div>
@@ -343,14 +434,18 @@ function ChatInterface() {
               <div className="mb-6">
                 <h4 className="text-slate-400 text-xs uppercase tracking-wider mb-2">Capabilities</h4>
                 <div className="flex flex-wrap gap-2">
-                  {agent.capabilities.map((capability, index) => (
-                    <span
-                      key={index}
-                      className="px-2 py-1 bg-slate-700 text-slate-300 text-xs rounded-md"
-                    >
-                      {capability}
-                    </span>
-                  ))}
+                  {agent.capabilities && agent.capabilities.length > 0 ? (
+                    agent.capabilities.map((capability, index) => (
+                      <span
+                        key={index}
+                        className="px-2 py-1 bg-slate-700 text-slate-300 text-xs rounded-md"
+                      >
+                        {capability}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-slate-500 text-xs">No capabilities defined</span>
+                  )}
                 </div>
               </div>
 

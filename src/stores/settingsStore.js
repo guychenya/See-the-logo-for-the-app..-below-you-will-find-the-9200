@@ -55,78 +55,147 @@ export const useSettingsStore = create(
 
       // Update LLM Provider
       updateProvider: (provider, config) => {
-        set(state => ({
-          llmProviders: {
-            ...state.llmProviders,
-            [provider]: {
-              ...state.llmProviders[provider],
-              ...config
-            }
+        try {
+          if (!provider || typeof provider !== 'string') {
+            console.error('Invalid provider name');
+            return;
           }
-        }));
+
+          set(state => {
+            const currentProviders = state.llmProviders || {};
+            const currentProvider = currentProviders[provider] || {};
+            
+            return {
+              llmProviders: {
+                ...currentProviders,
+                [provider]: {
+                  ...currentProvider,
+                  ...config
+                }
+              }
+            };
+          });
+        } catch (error) {
+          console.error('Error updating provider:', error);
+        }
       },
 
       // Set Default Provider
       setDefaultProvider: (provider) => {
-        set({ defaultProvider: provider });
+        try {
+          if (!provider || typeof provider !== 'string') {
+            console.error('Invalid provider name');
+            return;
+          }
+
+          const state = get();
+          if (!state.llmProviders?.[provider]) {
+            console.error('Provider does not exist');
+            return;
+          }
+
+          set({ defaultProvider: provider });
+        } catch (error) {
+          console.error('Error setting default provider:', error);
+        }
       },
 
       // Detect Ollama Models
       detectOllamaModels: async () => {
         try {
-          const response = await fetch('http://localhost:11434/api/tags');
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+          const response = await fetch('http://localhost:11434/api/tags', {
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+
           if (response.ok) {
             const data = await response.json();
             const models = data.models?.map(model => model.name) || [];
             
-            set(state => ({
-              llmProviders: {
-                ...state.llmProviders,
-                ollama: {
-                  ...state.llmProviders.ollama,
-                  models,
-                  selectedModel: models[0] || '',
-                  enabled: models.length > 0
+            set(state => {
+              const currentProviders = state.llmProviders || {};
+              const ollamaProvider = currentProviders.ollama || {};
+              
+              return {
+                llmProviders: {
+                  ...currentProviders,
+                  ollama: {
+                    ...ollamaProvider,
+                    models,
+                    selectedModel: models[0] || '',
+                    enabled: models.length > 0
+                  }
                 }
-              }
-            }));
+              };
+            });
             
             return models;
           }
         } catch (error) {
-          console.log('Ollama not available:', error);
+          if (error.name === 'AbortError') {
+            console.log('Ollama detection timeout');
+          } else {
+            console.log('Ollama not available:', error);
+          }
           
           // Set default models if Ollama is not running
-          set(state => ({
-            llmProviders: {
-              ...state.llmProviders,
-              ollama: {
-                ...state.llmProviders.ollama,
-                models: ['llama2', 'codellama', 'mistral', 'neural-chat'],
-                selectedModel: 'llama2',
-                enabled: false
+          set(state => {
+            const currentProviders = state.llmProviders || {};
+            const ollamaProvider = currentProviders.ollama || {};
+            
+            return {
+              llmProviders: {
+                ...currentProviders,
+                ollama: {
+                  ...ollamaProvider,
+                  models: ['llama2', 'codellama', 'mistral', 'neural-chat'],
+                  selectedModel: 'llama2',
+                  enabled: false
+                }
               }
-            }
-          }));
+            };
+          });
         }
         return [];
       },
 
       // Update App Settings
       updateAppSettings: (settings) => {
-        set(state => ({
-          appSettings: {
-            ...state.appSettings,
-            ...settings
+        try {
+          if (!settings || typeof settings !== 'object') {
+            console.error('Invalid settings object');
+            return;
           }
-        }));
+
+          set(state => ({
+            appSettings: {
+              ...state.appSettings,
+              ...settings
+            }
+          }));
+        } catch (error) {
+          console.error('Error updating app settings:', error);
+        }
       },
 
       // Get Active Provider
       getActiveProvider: () => {
-        const state = get();
-        const provider = state.llmProviders[state.defaultProvider];
-        return provider?.enabled && provider?.selectedModel ? provider : null;
+        try {
+          const state = get();
+          if (!state || !state.llmProviders || !state.defaultProvider) {
+            return null;
+          }
+
+          const provider = state.llmProviders[state.defaultProvider];
+          return provider?.enabled && provider?.selectedModel ? provider : null;
+        } catch (error) {
+          console.error('Error getting active provider:', error);
+          return null;
+        }
       }
     }),
     {
@@ -135,7 +204,10 @@ export const useSettingsStore = create(
         llmProviders: state.llmProviders,
         defaultProvider: state.defaultProvider,
         appSettings: state.appSettings
-      })
+      }),
+      onRehydrateStorage: () => (state) => {
+        console.log('Settings store rehydrated');
+      }
     }
   )
 );

@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useLocation, useParams, Link } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
-import ConnectionStatusIndicator from './ConnectionStatusIndicator';
 import SafeIcon from '../../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 
@@ -44,7 +43,6 @@ function Header() {
   const getPageTitle = () => {
     if (location.pathname === '/dashboard') return 'Dashboard';
     if (location.pathname === '/settings') return 'Settings';
-
     if (currentWorkspace) {
       if (location.pathname.endsWith(`/workspace/${workspaceId}`)) return currentWorkspace.name;
       if (location.pathname.includes(`/workspace/${workspaceId}/agents`)) return 'Agent Management';
@@ -84,9 +82,6 @@ function Header() {
 
         {/* Right Section */}
         <div className="flex items-center gap-4">
-          {/* Connection Status */}
-          <ConnectionStatusIndicator />
-          
           {/* Notifications */}
           <div className="relative">
             <button
@@ -101,13 +96,17 @@ function Header() {
               <div className="absolute right-0 mt-2 w-80 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-50">
                 <div className="p-3 border-b border-slate-700 flex justify-between items-center">
                   <h3 className="font-medium text-white">Notifications</h3>
-                  <button className="text-xs text-indigo-400 hover:text-indigo-300">Mark all as read</button>
+                  <button className="text-xs text-indigo-400 hover:text-indigo-300">
+                    Mark all as read
+                  </button>
                 </div>
                 <div className="max-h-80 overflow-y-auto">
                   {notifications.map(notification => (
                     <div
                       key={notification.id}
-                      className={`p-3 border-b border-slate-700 hover:bg-slate-700/50 ${!notification.read ? 'bg-slate-700/20' : ''}`}
+                      className={`p-3 border-b border-slate-700 hover:bg-slate-700/50 ${
+                        !notification.read ? 'bg-slate-700/20' : ''
+                      }`}
                     >
                       <div className="flex justify-between">
                         <h4 className="text-sm font-medium text-white">{notification.title}</h4>
@@ -118,7 +117,9 @@ function Header() {
                   ))}
                 </div>
                 <div className="p-2 text-center">
-                  <button className="text-sm text-indigo-400 hover:text-indigo-300">View all notifications</button>
+                  <button className="text-sm text-indigo-400 hover:text-indigo-300">
+                    View all notifications
+                  </button>
                 </div>
               </div>
             )}
@@ -130,7 +131,11 @@ function Header() {
               onClick={() => setShowUserMenu(!showUserMenu)}
               className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-700 transition-colors"
             >
-              <img src={user?.avatar} alt={user?.name} className="w-8 h-8 rounded-full" />
+              <img
+                src={user?.avatar}
+                alt={user?.name}
+                className="w-8 h-8 rounded-full"
+              />
               <span className="text-white font-medium">{user?.name}</span>
               <SafeIcon icon={FiChevronDown} className="w-4 h-4 text-slate-400" />
             </button>
@@ -142,10 +147,14 @@ function Header() {
                     <SafeIcon icon={FiUser} className="w-4 h-4" />
                     Profile
                   </button>
-                  <button className="flex items-center gap-3 w-full px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white">
+                  <Link
+                    to="/settings"
+                    className="flex items-center gap-3 w-full px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white"
+                    onClick={() => setShowUserMenu(false)}
+                  >
                     <SafeIcon icon={FiSettings} className="w-4 h-4" />
-                    Preferences
-                  </button>
+                    Settings
+                  </Link>
                   <button
                     onClick={logout}
                     className="flex items-center gap-3 w-full px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white"

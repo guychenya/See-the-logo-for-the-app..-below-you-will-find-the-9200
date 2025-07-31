@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useSettingsStore } from '../stores/settingsStore';
 import LLMSettings from '../components/Settings/LLMSettings';
@@ -10,16 +10,6 @@ const { FiBrain, FiSettings, FiBell, FiLock, FiUser } = FiIcons;
 function Settings() {
   const { appSettings, updateAppSettings } = useSettingsStore();
   const [activeTab, setActiveTab] = useState('llm');
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Add a short delay to ensure store is initialized properly
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, []);
 
   const tabs = [
     { id: 'llm', label: 'LLM Providers', icon: FiBrain },
@@ -45,7 +35,7 @@ function Settings() {
           <label className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
-              checked={appSettings?.autoSave ?? true}
+              checked={appSettings.autoSave}
               onChange={(e) => updateAppSettings({ autoSave: e.target.checked })}
               className="sr-only peer"
             />
@@ -61,7 +51,7 @@ function Settings() {
           <label className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
-              checked={appSettings?.enableDebugMode ?? false}
+              checked={appSettings.enableDebugMode}
               onChange={(e) => updateAppSettings({ enableDebugMode: e.target.checked })}
               className="sr-only peer"
             />
@@ -72,7 +62,7 @@ function Settings() {
         <div className="p-4 bg-slate-800 border border-slate-700 rounded-lg">
           <div className="flex justify-between items-center mb-2">
             <h3 className="text-white font-medium">Max Chat History</h3>
-            <span className="text-indigo-400 text-sm">{appSettings?.maxChatHistory ?? 100}</span>
+            <span className="text-indigo-400 text-sm">{appSettings.maxChatHistory}</span>
           </div>
           <p className="text-slate-400 text-sm mb-4">Maximum number of messages to keep in chat history</p>
           <input
@@ -80,7 +70,7 @@ function Settings() {
             min="50"
             max="500"
             step="50"
-            value={appSettings?.maxChatHistory ?? 100}
+            value={appSettings.maxChatHistory}
             onChange={(e) => updateAppSettings({ maxChatHistory: parseInt(e.target.value) })}
             className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer"
           />
@@ -109,7 +99,7 @@ function Settings() {
           <label className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
-              checked={appSettings?.enableNotifications ?? true}
+              checked={appSettings.enableNotifications}
               onChange={(e) => updateAppSettings({ enableNotifications: e.target.checked })}
               className="sr-only peer"
             />
@@ -165,7 +155,6 @@ function Settings() {
                 <div className="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
               </label>
             </div>
-
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-slate-300">Error Reporting</span>
@@ -186,12 +175,10 @@ function Settings() {
               <span className="text-white font-medium">Export Data</span>
               <p className="text-slate-400 text-sm">Download all your workspace data</p>
             </button>
-
             <button className="w-full text-left p-3 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors">
               <span className="text-white font-medium">Clear Cache</span>
               <p className="text-slate-400 text-sm">Clear stored data and reset preferences</p>
             </button>
-
             <button className="w-full text-left p-3 bg-red-600/20 border border-red-600/30 rounded-lg hover:bg-red-600/30 transition-colors">
               <span className="text-red-400 font-medium">Delete Account</span>
               <p className="text-red-400/70 text-sm">Permanently delete your account and all data</p>
@@ -229,7 +216,6 @@ function Settings() {
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
-
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
             <input
@@ -238,7 +224,6 @@ function Settings() {
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
-
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">Bio</label>
             <textarea
@@ -259,14 +244,6 @@ function Settings() {
   );
 
   const renderTabContent = () => {
-    if (isLoading) {
-      return (
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
-        </div>
-      );
-    }
-
     switch (activeTab) {
       case 'llm':
         return <LLMSettings />;

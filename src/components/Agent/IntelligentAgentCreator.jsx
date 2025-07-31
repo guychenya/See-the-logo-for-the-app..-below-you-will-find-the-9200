@@ -1,55 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
 import { useAgentStore } from '../../stores/agentStore';
 import { llmService } from '../../services/llmService';
-import { useSettingsStore } from '../../stores/settingsStore';
 import SafeIcon from '../../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 
-const { FiX, FiZap, FiRefreshCw, FiCheck, FiPlus, FiAlertCircle } = FiIcons;
+const { FiX, FiZap, FiRefreshCw, FiCheck, FiPlus, FiMinus } = FiIcons;
 
 function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null }) {
-  const navigate = useNavigate();
   const { createAgent } = useAgentStore();
-  const { getActiveProvider } = useSettingsStore();
   const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [description, setDescription] = useState('');
   const [generatedConfig, setGeneratedConfig] = useState(null);
   const [selectedSubAgents, setSelectedSubAgents] = useState([]);
-  const [connectionError, setConnectionError] = useState(null);
-
-  useEffect(() => {
-    // Check for active provider on component mount
-    checkLLMConnection();
-  }, []);
-
-  const checkLLMConnection = () => {
-    const activeProvider = getActiveProvider();
-    if (!activeProvider) {
-      setConnectionError("No active LLM provider configured. Please set up an LLM provider in Settings.");
-    } else if (!activeProvider.selectedModel) {
-      setConnectionError(`${activeProvider.name} is enabled but no model is selected. Please select a model in Settings.`);
-    } else {
-      setConnectionError(null);
-    }
-  };
-
-  const handleGoToSettings = () => {
-    onClose();
-    navigate('/settings');
-  };
 
   const handleGenerateConfig = async () => {
     if (!description.trim()) return;
-
-    // Check connection again before generating
-    const activeProvider = getActiveProvider();
-    if (!activeProvider || !activeProvider.selectedModel) {
-      checkLLMConnection();
-      return;
-    }
 
     setIsGenerating(true);
     try {
@@ -59,7 +26,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
     } catch (error) {
       console.error('Error generating agent config:', error);
       // Fallback to manual creation
-      setConnectionError(`AI generation failed: ${error.message}. Please try again or create manually.`);
+      alert('AI generation failed. Please try again or create manually.');
     } finally {
       setIsGenerating(false);
     }
@@ -96,6 +63,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
         parentId: createdAgent.id,
         settings: generatedConfig.settings || {}
       };
+      
       createAgent(subAgentData);
     });
 
@@ -115,27 +83,12 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
 
   const renderStep1 = () => (
     <div className="space-y-6">
-      {connectionError && (
-        <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
-          <SafeIcon icon={FiAlertCircle} className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-          <div>
-            <h4 className="text-red-400 font-medium">Connection Error</h4>
-            <p className="text-red-300/80 text-sm mt-1">{connectionError}</p>
-            <button 
-              onClick={handleGoToSettings}
-              className="text-red-400 hover:text-red-300 text-sm mt-2 underline"
-            >
-              Go to Settings
-            </button>
-          </div>
-        </div>
-      )}
-
       <div>
         <h3 className="text-lg font-medium text-white mb-2">Describe Your Agent</h3>
         <p className="text-slate-400 text-sm mb-4">
           Tell me what you want your agent to do. I'll generate a complete configuration for you.
         </p>
+        
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -158,7 +111,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
       <div className="flex justify-end">
         <button
           onClick={handleGenerateConfig}
-          disabled={!description.trim() || isGenerating || connectionError}
+          disabled={!description.trim() || isGenerating}
           className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
         >
           {isGenerating ? (
@@ -190,6 +143,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
         {/* Main Agent Config */}
         <div className="space-y-4">
           <h4 className="text-white font-medium">Main Agent</h4>
+          
           <div className="bg-slate-700 rounded-lg p-4">
             <div className="space-y-3">
               <div>
@@ -201,6 +155,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
                   className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
+              
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>
                 <textarea
@@ -210,6 +165,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
                   rows="3"
                 />
               </div>
+              
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Type</label>
                 <select
@@ -221,6 +177,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
                   <option value="specialized">Specialized Agent</option>
                 </select>
               </div>
+              
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Capabilities</label>
                 <div className="flex flex-wrap gap-2">
@@ -248,6 +205,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
         {/* Sub-Agents */}
         <div className="space-y-4">
           <h4 className="text-white font-medium">Suggested Sub-Agents</h4>
+          
           {generatedConfig?.suggestedSubAgents?.length > 0 ? (
             <div className="space-y-3">
               {generatedConfig.suggestedSubAgents.map((subAgent, index) => (
@@ -296,6 +254,7 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
         >
           Back
         </button>
+        
         <button
           onClick={handleCreateAgent}
           className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2"
@@ -319,7 +278,10 @@ function IntelligentAgentCreator({ workspaceId, onClose, parentAgentId = null })
             <h2 className="text-xl font-semibold text-white">Intelligent Agent Creator</h2>
             <p className="text-slate-400 text-sm">Describe your needs and I'll create the perfect agent for you</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white"
+          >
             <SafeIcon icon={FiX} className="w-6 h-6" />
           </button>
         </div>

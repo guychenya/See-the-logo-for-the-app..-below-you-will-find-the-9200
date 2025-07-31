@@ -2,7 +2,6 @@ import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './stores/authStore';
-import { useSettingsStore } from './stores/settingsStore';
 import { useEffect } from 'react';
 
 // Pages
@@ -24,24 +23,10 @@ import Layout from './components/Layout/Layout';
 
 function App() {
   const { user, initializeAuth } = useAuthStore();
-  const { autoConnectProviders } = useSettingsStore();
 
   useEffect(() => {
     initializeAuth();
   }, [initializeAuth]);
-
-  useEffect(() => {
-    // Auto-connect to LLM providers if the user is authenticated
-    if (user) {
-      console.log('User authenticated, auto-connecting to LLM providers...');
-      // Increased timeout to ensure UI is fully loaded
-      setTimeout(() => {
-        autoConnectProviders().catch(err => {
-          console.error('Error auto-connecting to LLM providers:', err);
-        });
-      }, 2000); // Increased from 1000ms to 2000ms
-    }
-  }, [user, autoConnectProviders]);
 
   if (!user) {
     return <Login />;
@@ -54,6 +39,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/workspace/:workspaceId" element={<WorkspaceView />} />
             <Route path="/workspace/:workspaceId/agents" element={<AgentManagement />} />
             <Route path="/workspace/:workspaceId/agent/:agentId" element={<AgentConfiguration />} />
@@ -63,12 +49,14 @@ function App() {
             <Route path="/workspace/:workspaceId/history" element={<ContentHistory />} />
             <Route path="/workspace/:workspaceId/team" element={<TeamManagement />} />
             <Route path="/workspace/:workspaceId/analytics" element={<AnalyticsDashboard />} />
-            <Route path="/settings" element={<Settings />} />
           </Routes>
         </Layout>
-        <Toaster position="top-right" toastOptions={{
-          className: 'bg-slate-800 text-white border border-slate-700',
-        }} />
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            className: 'bg-slate-800 text-white border border-slate-700',
+          }}
+        />
       </div>
     </Router>
   );

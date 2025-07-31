@@ -83,12 +83,12 @@ function Sidebar() {
                     <div className={`w-3 h-3 rounded-full bg-${workspace.color}-500`} />
                     <span className="truncate text-sm">{workspace.name}</span>
                   </div>
-                  <SafeIcon 
-                    icon={expandedWorkspace === workspace.id ? FiChevronDown : FiChevronRight} 
-                    className="w-4 h-4" 
+                  <SafeIcon
+                    icon={expandedWorkspace === workspace.id ? FiChevronDown : FiChevronRight}
+                    className="w-4 h-4"
                   />
                 </button>
-                
+
                 {(expandedWorkspace === workspace.id || isWorkspaceActive(workspace.id)) && (
                   <div className="ml-4 pl-3 border-l border-slate-700 space-y-1 mt-1">
                     {workspaceNavigationItems.map(item => (

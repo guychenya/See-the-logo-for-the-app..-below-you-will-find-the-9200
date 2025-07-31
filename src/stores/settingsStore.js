@@ -35,15 +35,15 @@ export const useSettingsStore = create(
           enabled: true,
           apiKey: '',
           baseUrl: 'http://localhost:11434',
-          models: [],
-          selectedModel: '',
+          models: ['llama2', 'codellama', 'mistral', 'neural-chat'],
+          selectedModel: 'llama2',
           isLocal: true
         }
       },
-      
+
       // Default LLM Provider
       defaultProvider: 'ollama',
-      
+
       // App Settings
       appSettings: {
         theme: 'dark',
@@ -95,6 +95,19 @@ export const useSettingsStore = create(
           }
         } catch (error) {
           console.log('Ollama not available:', error);
+          
+          // Set default models if Ollama is not running
+          set(state => ({
+            llmProviders: {
+              ...state.llmProviders,
+              ollama: {
+                ...state.llmProviders.ollama,
+                models: ['llama2', 'codellama', 'mistral', 'neural-chat'],
+                selectedModel: 'llama2',
+                enabled: false
+              }
+            }
+          }));
         }
         return [];
       },
@@ -113,7 +126,7 @@ export const useSettingsStore = create(
       getActiveProvider: () => {
         const state = get();
         const provider = state.llmProviders[state.defaultProvider];
-        return provider?.enabled ? provider : null;
+        return provider?.enabled && provider?.selectedModel ? provider : null;
       }
     }),
     {

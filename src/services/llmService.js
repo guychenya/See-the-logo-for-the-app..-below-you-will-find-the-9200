@@ -7,7 +7,6 @@ class LLMService {
 
   async generateCompletion(prompt, options = {}) {
     const provider = this.settingsStore.getState().getActiveProvider();
-    
     if (!provider) {
       throw new Error('No active LLM provider configured');
     }
@@ -83,7 +82,9 @@ class LLMService {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
         generationConfig: {
           temperature: options.temperature,
           maxOutputTokens: options.maxTokens
@@ -100,28 +101,67 @@ class LLMService {
   }
 
   async callOllama(prompt, options, provider) {
-    const response = await fetch(`${provider.baseUrl}/api/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: provider.selectedModel,
-        prompt: prompt,
-        options: {
-          temperature: options.temperature,
-          num_predict: options.maxTokens
+    try {
+      const response = await fetch(`${provider.baseUrl}/api/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
         },
-        stream: false
-      })
-    });
+        body: JSON.stringify({
+          model: provider.selectedModel,
+          prompt: prompt,
+          options: {
+            temperature: options.temperature,
+            num_predict: options.maxTokens
+          },
+          stream: false
+        })
+      });
 
-    if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.statusText}`);
+      if (!response.ok) {
+        throw new Error(`Ollama API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.response;
+    } catch (error) {
+      console.error('Ollama connection error:', error);
+      throw new Error(`Failed to connect to Ollama: ${error.message}`);
     }
+  }
 
-    const data = await response.json();
-    return data.response;
+  async generateAgentResponse(agentConfig, userMessage, conversationHistory = []) {
+    const { systemPrompt, capabilities, settings } = agentConfig;
+    
+    // Build context from conversation history
+    const contextMessages = conversationHistory.slice(-10); // Last 10 messages for context
+    const historyContext = contextMessages.map(msg => 
+      `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
+    ).join('\n');
+
+    // Create a comprehensive prompt
+    const prompt = `${systemPrompt}
+
+You are an AI agent with the following capabilities: ${capabilities.join(', ')}
+
+Previous conversation context:
+${historyContext}
+
+Current user message: ${userMessage}
+
+Please respond as this agent, staying in character and using your specified capabilities. Be helpful, accurate, and maintain the personality defined in your system prompt.`;
+
+    try {
+      const response = await this.generateCompletion(prompt, {
+        temperature: settings?.temperature || 0.7,
+        maxTokens: settings?.maxTokens || 2000
+      });
+
+      return response;
+    } catch (error) {
+      console.error('Error generating agent response:', error);
+      throw error;
+    }
   }
 
   async generateAgentConfig(description) {
@@ -147,7 +187,7 @@ Generate a JSON configuration with the following structure:
   "suggestedSubAgents": [
     {
       "name": "Sub-agent name",
-      "description": "Sub-agent description",
+      "description": "Sub-agent description", 
       "capabilities": ["capability1", "capability2"]
     }
   ]
@@ -172,6 +212,19 @@ Make the configuration detailed, practical, and tailored to the specific use cas
     } catch (error) {
       return { success: false, error: error.message };
     }
+  }
+
+  async detectOllamaModels() {
+    try {
+      const response = await fetch('http://localhost:11434/api/tags');
+      if (response.ok) {
+        const data = await response.json();
+        return data.models?.map(model => model.name) || [];
+      }
+    } catch (error) {
+      console.log('Ollama not available:', error);
+    }
+    return [];
   }
 }
 

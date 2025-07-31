@@ -3,22 +3,26 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAgentStore } from '../stores/agentStore';
 import { useContentStore } from '../stores/contentStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { llmService } from '../services/llmService';
 import { formatDistanceToNow } from 'date-fns';
 import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 
-const { FiSend, FiDownload, FiCopy, FiSave, FiX, FiInfo, FiArrowLeft } = FiIcons;
+const { FiSend, FiDownload, FiCopy, FiSave, FiX, FiInfo, FiArrowLeft, FiAlertTriangle } = FiIcons;
 
 function ChatInterface() {
   const { workspaceId, agentId } = useParams();
   const navigate = useNavigate();
   const { agents } = useAgentStore();
   const { addChatMessage, getChatHistory } = useContentStore();
+  const { getActiveProvider } = useSettingsStore();
   const agent = agents.find(a => a.id === agentId);
   const [input, setInput] = useState('');
   const [chatHistory, setChatHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [connectionError, setConnectionError] = useState(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -32,13 +36,29 @@ function ChatInterface() {
     scrollToBottom();
   }, [chatHistory]);
 
+  useEffect(() => {
+    // Check if LLM provider is configured
+    const provider = getActiveProvider();
+    if (!provider) {
+      setConnectionError('No LLM provider configured. Please configure Ollama or another provider in Settings.');
+    } else {
+      setConnectionError(null);
+    }
+  }, [getActiveProvider]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
+
+    const provider = getActiveProvider();
+    if (!provider) {
+      setConnectionError('No LLM provider configured. Please configure Ollama or another provider in Settings.');
+      return;
+    }
 
     // Add user message
     const userMessage = {
@@ -50,22 +70,46 @@ function ChatInterface() {
 
     setChatHistory(prev => [...prev, userMessage]);
     addChatMessage(agentId, userMessage);
+    const currentInput = input;
     setInput('');
     setIsLoading(true);
+    setConnectionError(null);
 
-    // Simulate agent response after a delay
-    setTimeout(() => {
+    try {
+      // Generate agent response using the LLM service
+      const agentResponse = await llmService.generateAgentResponse(
+        agent,
+        currentInput,
+        chatHistory
+      );
+
       const agentMessage = {
         id: (Date.now() + 1).toString(),
         role: 'agent',
-        content: `This is a simulated response from ${agent?.name}. In a real implementation, this would be the actual response from the AI agent based on your message: "${input.trim()}"`,
+        content: agentResponse,
         timestamp: new Date().toISOString()
       };
 
       setChatHistory(prev => [...prev, agentMessage]);
       addChatMessage(agentId, agentMessage);
+    } catch (error) {
+      console.error('Error generating response:', error);
+      
+      // Add error message
+      const errorMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'agent',
+        content: `I apologize, but I'm having trouble connecting to the language model. Error: ${error.message}. Please check your LLM provider configuration in Settings.`,
+        timestamp: new Date().toISOString(),
+        isError: true
+      };
+
+      setChatHistory(prev => [...prev, errorMessage]);
+      addChatMessage(agentId, errorMessage);
+      setConnectionError(error.message);
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const copyToClipboard = (text) => {
@@ -107,8 +151,10 @@ function ChatInterface() {
           <div>
             <h2 className="text-white font-semibold">{agent.name}</h2>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500"></span>
-              <span className="text-slate-400 text-xs">Online</span>
+              <span className={`w-2 h-2 rounded-full ${connectionError ? 'bg-red-500' : 'bg-green-500'}`}></span>
+              <span className="text-slate-400 text-xs">
+                {connectionError ? 'Disconnected' : 'Online'}
+              </span>
             </div>
           </div>
         </div>
@@ -124,6 +170,22 @@ function ChatInterface() {
         </button>
       </div>
 
+      {/* Connection Error Banner */}
+      {connectionError && (
+        <div className="bg-red-600/20 border-b border-red-600/30 p-3">
+          <div className="flex items-center gap-2 text-red-400 text-sm">
+            <SafeIcon icon={FiAlertTriangle} className="w-4 h-4" />
+            <span>{connectionError}</span>
+            <button
+              onClick={() => navigate('/settings')}
+              className="ml-auto text-red-300 hover:text-red-200 underline"
+            >
+              Configure Settings
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
         {/* Chat Messages */}
         <div className="flex-1 flex flex-col">
@@ -136,17 +198,19 @@ function ChatInterface() {
                   <p className="text-slate-400 text-sm mb-4">
                     This agent can help you with: {agent.capabilities.join(', ')}
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg mx-auto">
-                    {agent.capabilities.slice(0, 4).map((capability, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setInput(`Help me with ${capability.toLowerCase()}`)}
-                        className="bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 px-3 rounded-lg transition-colors"
-                      >
-                        {capability}
-                      </button>
-                    ))}
-                  </div>
+                  {!connectionError && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg mx-auto">
+                      {agent.capabilities.slice(0, 4).map((capability, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setInput(`Help me with ${capability.toLowerCase()}`)}
+                          className="bg-slate-700 hover:bg-slate-600 text-white text-sm py-2 px-3 rounded-lg transition-colors"
+                        >
+                          {capability}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -160,6 +224,8 @@ function ChatInterface() {
                     className={`max-w-[80%] rounded-lg p-4 ${
                       message.role === 'user'
                         ? 'bg-indigo-600 text-white'
+                        : message.isError
+                        ? 'bg-red-600/20 border border-red-600/30 text-red-200'
                         : 'bg-slate-800 text-slate-200'
                     }`}
                   >
@@ -168,7 +234,7 @@ function ChatInterface() {
                       <span>
                         {formatDistanceToNow(new Date(message.timestamp), { addSuffix: true })}
                       </span>
-                      {message.role === 'agent' && (
+                      {message.role === 'agent' && !message.isError && (
                         <div className="flex gap-2">
                           <button
                             onClick={() => copyToClipboard(message.content)}
@@ -216,8 +282,9 @@ function ChatInterface() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   className="w-full pl-4 pr-12 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                  placeholder="Type your message..."
+                  placeholder={connectionError ? "Configure LLM provider to start chatting..." : "Type your message..."}
                   rows="2"
+                  disabled={!!connectionError}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -228,7 +295,7 @@ function ChatInterface() {
                 <button
                   type="submit"
                   className="absolute right-2 bottom-2 p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                  disabled={isLoading || !input.trim()}
+                  disabled={isLoading || !input.trim() || !!connectionError}
                 >
                   <SafeIcon icon={FiSend} className="w-5 h-5" />
                 </button>
